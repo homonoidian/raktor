@@ -1,0 +1,13 @@
+name: raktor
+version: 0.1.0
+
+authors:
+  - Alexey Yurchenko <homonoidian@yandex.ru>
+
+targets:
+  raktor:
+    main: src/raktor.cr
+
+crystal: 1.9.2
+
+license: MIT
