@@ -14,19 +14,25 @@ module Raktor::Sparse
     end
 
     # Appends *other* to this label set.
-    def <<(other : Label)
+    def <<(other : Label) : self
       @labels << other
+
+      self
     end
 
     # Appends all labels from *other* label set to this label set.
-    def <<(other : LabelSet)
+    def <<(other : LabelSet) : self
       @labels.concat(other.@labels)
+
+      self
     end
 
     # Normalizes labels in this label set, obtaining ids using
     # the given *getlabel* proc.
-    def norm(getlabel)
+    def norm(getlabel) : self
       @labels.transform! &.norm(getlabel)
+
+      self
     end
 
     # Removes all labels from this set that are present in *candidates*.
@@ -36,17 +42,15 @@ module Raktor::Sparse
       @labels.empty?
     end
 
-    # Substitutes all labels in this label set with one common
-    # label. Clears the content of this set, leaving only the
-    # common label.
-    def unify(book : RuleBook, *, into subst)
+    # Substitutes all labels in this label set with one common label,
+    # submits the substitutions to *subst*. Clears the content of this
+    # set, leaving only the common label.
+    def unify(book : RuleBook, *, into subst) : self
       common = book.newlabel
 
       each &.replace_with(common, in: subst)
       clear
       self << common
-
-      self
     end
 
     # Converts this label set to a Crystal `Set(Label)`.

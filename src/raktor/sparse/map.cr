@@ -50,8 +50,7 @@ module Raktor::Sparse
         # conclusion that an entire program matches.
         @conj.evaluate(facts)
 
-        # For all programs that did match, append their corresponding
-        # keys to the provided set.
+        # For all programs that did match, report their respective keys.
         facts.report(report)
 
         @working.clear

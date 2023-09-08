@@ -24,10 +24,6 @@ module Raktor::Sparse
       @irefs.zero? && size <= 2
     end
 
-    def dead?
-      @irefs.zero? && @jrefs.zero?
-    end
-
     # Appends *instruction* to this chunk.
     def emit(instruction : VarInstr)
       # A sneaky one: if instructions
@@ -150,40 +146,6 @@ module Raktor::Sparse
           end
 
           index += 1
-
-          # case instr.opcode
-          # when .j?
-          #   next if explorej?(instr, batch)
-          #   (dest = instr.args[0].as?(Chunk)) && dest.inlinable?
-          #   # Inline chunk
-          #   dest.undo(Machine::Opcode::J)
-          #   batch.delete_at(index)
-          #   offset = 0
-          #   dest.each_instruction(compiler) do |sub|
-          #     batch.insert(index + offset, sub)
-          #     offset += 1
-          #   end
-          #   next
-          # when .jt?
-          #   # Queue target chunks in the jumptable referenced by JT.
-          #   needle = instr.args[0].as(Int32)
-          #   compiler.@jumptables.each do |jumptable, addr|
-          #     if needle == addr
-          #       jumptable.each do |_, target|
-          #         queue << target
-          #       end
-          #       break
-          #     end
-          #   end
-          #   index += 1
-          #   next
-          # end
-
-          # instr.args.each do |arg|
-          #   next unless arg.is_a?(Chunk)
-          #   queue << arg
-          # end
-
         end
 
         world[chunk] = batch

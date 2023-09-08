@@ -61,7 +61,7 @@ module Raktor::Sparse
     end
 
     # Holds the position of the current character.
-    def position
+    def position : Int32
       @reader.pos
     end
 

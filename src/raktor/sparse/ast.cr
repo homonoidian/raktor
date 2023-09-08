@@ -3,6 +3,9 @@ module Raktor::Sparse
   end
 
   module AST::Node
+    # Represents this node as a series of `Gate`s and appends them
+    # to  *chain*. Rule book *book* is appropriately populated by
+    # rules and constraints.
     abstract def compile(chain : Chain, book : RuleBook) : Label
 
     # If possible converts this node to an array of `Float64`s. Returns
@@ -13,7 +16,7 @@ module Raktor::Sparse
   end
 
   # AST node for a number literal, such as `1.23`, `-100_000`, or `10`.
-  class AST::Num
+  struct AST::Num
     include Node
 
     def initialize(@value : Float64)
@@ -38,7 +41,8 @@ module Raktor::Sparse
     end
   end
 
-  class AST::Str
+  # AST node for a string literal, such as `"hello world"`.
+  struct AST::Str
     include Node
 
     def initialize(@value : String)
@@ -55,7 +59,8 @@ module Raktor::Sparse
     end
   end
 
-  class AST::Boolean
+  # AST node for boolean literals `true` and `false`.
+  struct AST::Boolean
     include Node
 
     def initialize(@value : Bool)
@@ -72,7 +77,18 @@ module Raktor::Sparse
     end
   end
 
-  class AST::Id
+  # AST node for an identifier.
+  #
+  # Currently, only the following identifiers are allowed:
+  #
+  # - `any`: matches any term
+  # - `string`: matches a string term
+  # - `number`: matches a number term
+  # - `bool`: matches a boolean term
+  # - `dict`: matches a dictionary term
+  #
+  # Any other identifier will cause a `CompileError`.
+  struct AST::Id
     include Node
 
     def initialize(@value : String)
@@ -86,7 +102,7 @@ module Raktor::Sparse
       when "bool"   then chain.append(Gate::IsBool.new)
       when "dict"   then chain.append(Gate::IsDict.new)
       else
-        raise CompileError.new("undefined symbol: #{@value}")
+        raise CompileError.new("undefined identifier: #{@value}")
       end
 
       chain.append(book.newlabel)
@@ -97,6 +113,8 @@ module Raktor::Sparse
     end
   end
 
+  # AST node for a dictionary literal, such as `{ x 100, y 200 }`
+  # or `[1, 2]`.
   struct AST::Dict
     include Node
 
@@ -124,6 +142,7 @@ module Raktor::Sparse
     end
   end
 
+  # AST node for a key-value pair in a dictionary.
   class AST::KV
     include Node
 
@@ -141,6 +160,9 @@ module Raktor::Sparse
     end
   end
 
+  # AST node for an all-pass constraint. The only way you can obtain
+  # this node is by having an empty Sparse program. Then this ndoe
+  # will be the toplevel node.
   struct AST::Constraint::AllPass
     include Node
 
@@ -153,6 +175,9 @@ module Raktor::Sparse
     end
   end
 
+  # AST node for a "satisfies" constraint, such as `number /? 10`.
+  # Here, the two parts `number` and `/? 10` are "glued" together
+  # into a "satisfies" constraint.
   class AST::Constraint::Satisfies
     include Node
 
@@ -168,6 +193,9 @@ module Raktor::Sparse
     end
   end
 
+  # AST node for a choice constraint, such as `1 | 2`. Only allowed
+  # as an argument to `<`, `>`, `<=`, `>=`, or `/?`, e.g. `/? 10 | 20`
+  # means "divisible by 10 or 20".
   class AST::Constraint::Choose
     include Node
 
@@ -187,6 +215,7 @@ module Raktor::Sparse
     end
   end
 
+  # AST node for am "or" constraint, such as `number or string`.
   class AST::Constraint::Or
     include Node
 
@@ -209,6 +238,7 @@ module Raktor::Sparse
     end
   end
 
+  # AST node for a "divisible by" constraint, such as `/? 10`.
   class AST::Constraint::DivBy
     include Node
 
@@ -235,6 +265,7 @@ module Raktor::Sparse
     end
   end
 
+  # AST node for `not(...)`, e.g. `not(/? 10)`.
   class AST::Constraint::Not
     include Node
 
@@ -250,9 +281,11 @@ module Raktor::Sparse
     end
   end
 
+  # AST node for comparison constraints, such as `< 100`.
   class AST::Constraint::Cmp
     include Node
 
+    # Lists the supported kinds of comparison.
     enum Kind
       Lt
       Gt
@@ -289,6 +322,7 @@ module Raktor::Sparse
     end
   end
 
+  # AST node for a range constraint, such as `0..=100` or `0..<100`.
   struct AST::Constraint::InRange
     include Node
 

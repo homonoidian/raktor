@@ -11,6 +11,7 @@ module Raktor::Sparse
     protected def initialize(@opcode : Machine::Opcode, @args : Array(Int32 | Chunk))
     end
 
+    # Returns an instance of `VarInstr` with the given *opcode* and *args*.
     def self.[](opcode : Machine::Opcode, *args, **kwargs)
       arglist = args.each_with_object(Array(Int32 | Chunk).new(args.size)) do |arg, arglist|
         arg.apply(opcode) if arg.is_a?(Chunk)

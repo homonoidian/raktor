@@ -118,7 +118,7 @@ class Panama(InOut, Med)
 end
 
 # "Double-buffered" hash. The main hash can be read and written to,
-# while the auxillary hash is given to you in `transform!` and then
+# and the auxillary hash is given to you in `transform!` and then
 # swapped with the main hash.
 class TransformableHash(K, V)
   def initialize
@@ -140,7 +140,7 @@ class TransformableHash(K, V)
 end
 
 # "Double-buffered" set. The main set can be read and written to,
-# while the auxillary set is given to you in `transform!` and then
+# and the auxillary set is given to you in `transform!` and then
 # swapped with the main set.
 class TransformableSet(T)
   def initialize

@@ -138,6 +138,19 @@ module Raktor::Sparse
     end
   end
 
+  # Rewrites "or" rules to "and" rules.
+  #
+  # ```text
+  # declare %2, %3;
+  # %1 = %2 | %3;
+  #
+  # ===>
+  #
+  # %_0 = not(%2)
+  # %_1 = not(%3)
+  # %_2 = %_0 & %_1
+  # %1 = not(%_2)
+  # ```
   struct BookRewriter::OrToAndRewriter
     include BookRewriter
 

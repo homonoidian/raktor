@@ -16,12 +16,6 @@ module Raktor::Sparse
       set.includes?(@id)
     end
 
-    def fetch?(map : LabelMap)
-      return unless value = map[@id]?
-
-      Label.new(value)
-    end
-
     # Using this label's id as the index, fetches an element
     # from *indexable* without doing any bounds check.
     def unsafe_fetch(*, from indexable : Indexable(T)) : T forall T
@@ -56,12 +50,9 @@ module Raktor::Sparse
       set << @id
     end
 
+    # Appends this label to *set*.
     def transfer(set : Set(Label))
       set << self
-    end
-
-    def map(in map : LabelMap, to other : Label)
-      map[@id] = other.@id
     end
 
     # Removes this label's id from *set*.

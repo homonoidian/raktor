@@ -167,7 +167,7 @@ module Raktor::Sparse::Machine
           #{to_s_lines(@tape, &.itself).join("\n    ")}
           </Tape>
         </LinearIR>
-      END
+        END
     end
   end
 

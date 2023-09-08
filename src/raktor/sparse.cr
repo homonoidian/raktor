@@ -34,5 +34,5 @@ require "./sparse/map"
 # map[Term::Num.new(30)]    # => [1]
 # map[Term::Num.new(100)]   # => [0, 1]
 # ```
-module Sparse
+module Raktor::Sparse
 end
