@@ -1,0 +1,10 @@
+version: 2.0
+shards:
+  cannon:
+    git: https://github.com/papierkorb/cannon.git
+    version: 0.2.1
+
+  disruptor:
+    git: https://github.com/nolantait/disruptor.cr.git
+    version: 0.1.0
+

@@ -23,7 +23,7 @@ module Raktor::Sparse
     end
 
     def initialize(value : String)
-      initialize(value.to_f64)
+      initialize(value.delete('_').to_f64)
     end
 
     def to_f64s
@@ -146,7 +146,7 @@ module Raktor::Sparse
   class AST::KV
     include Node
 
-    def initialize(@key : Term::Dict::Key, @constraint : Node)
+    def initialize(@key : Term, @constraint : Node)
     end
 
     def compile(chain : Chain, book : RuleBook) : Label

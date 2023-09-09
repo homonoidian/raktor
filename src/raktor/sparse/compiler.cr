@@ -57,7 +57,7 @@ module Raktor::Sparse
     def initialize(@filter : Filter)
       @chunks = [] of Chunk
       @numbers = {} of Float64 => Int32
-      @strings = {} of String => Int32
+      @terms = {} of Term => Int32
       @labels = {} of Set(Label) => Int32
       @jumptables = {} of Mapping(Term, Chunk) => Int32
     end
@@ -70,12 +70,17 @@ module Raktor::Sparse
     # Returns constant address for *operand*, adding *operand* to the
     # appropriate constant pool if it is not there already.
     def const(operand : Float64)
-      @numbers[operand] ||= @numbers.size
+      const(Term::Num.new(operand))
     end
 
     # :ditto:
     def const(operand : String)
-      0x10000000 | (@strings[operand] ||= @strings.size)
+      const(Term::Str.new(operand))
+    end
+
+    # :ditto:
+    def const(operand : Term)
+      @terms[operand] ||= @terms.size
     end
 
     # :ditto:
@@ -165,12 +170,7 @@ module Raktor::Sparse
         result << jumptable.mapv { |ref| offsets[ref] }
       end
 
-      IR.new(tape,
-        @numbers.map { |k, _| Term::Num.new(k) },
-        @strings.map { |k, _| Term::Str.new(k) },
-        @labels.keys,
-        jumptables,
-      )
+      IR.new(tape, @terms.keys, @labels.keys, jumptables)
     end
 
     # Shorthand for `Compiler.new(filter).compile`.

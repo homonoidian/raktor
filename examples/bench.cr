@@ -10,11 +10,11 @@
 #
 # Ryzen 2200G
 #
-# Compilation of 200 000 + 1 programs took: 2553.857327ms
-#      lookup name age ok  68.60  ( 14.58ms) (± 3.37%)  2.29MB/op   26962.01× slower
-#    lookup name age fail   1.85M (540.67ns) (±27.68%)    496B/op            fastest
-# lookup name lit age lit   1.33M (754.31ns) (±23.97%)    512B/op       1.40× slower
-#                lookup n  10.90  ( 91.70ms) (±17.39%)  48.8MB/op  169612.11× slower
+# Compilation of 200 000 + 1 programs took: 2537.831687ms
+#      lookup name age ok  70.90  ( 14.10ms) (± 3.48%)  2.29MB/op   24453.37× slower
+#    lookup name age fail   1.73M (576.76ns) (±29.90%)    592B/op            fastest
+# lookup name lit age lit   1.33M (753.17ns) (±26.85%)    608B/op       1.31× slower
+#                lookup n  10.70  ( 93.44ms) (±18.32%)  51.9MB/op  162005.04× slower
 
 require "benchmark"
 require "../src/raktor"

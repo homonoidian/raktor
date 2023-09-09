@@ -292,7 +292,7 @@ module Raktor::Sparse
         die("expected an constraint, found none")
       end
 
-      KV.new(key, constraint)
+      KV.new(Term::Str.new(key), constraint)
     end
 
     # Parses a dictionary. Returns nil if no dictionary is found at
@@ -325,7 +325,7 @@ module Raktor::Sparse
                       Token::Type::RSQB
                     ) { constraint?.as?(Node) }
 
-      Dict.new(items.map_with_index { |item, index| KV.new(index, item) })
+      Dict.new(items.map_with_index { |item, index| KV.new(Term::Num.new(index), item) })
     end
 
     # Parses a toplevel expression. If no expression the "all pass"

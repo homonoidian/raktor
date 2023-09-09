@@ -211,7 +211,7 @@ module Raktor::Sparse
   # Lets the value of a term's attribute through. The term should have
   # already been proven to be a dictionary.
   struct Gate::Attr < Gate
-    def initialize(@attr : Term::Dict::Key)
+    def initialize(@attr : Term)
     end
 
     def overlap

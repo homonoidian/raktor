@@ -47,6 +47,8 @@ describe Raktor::Sparse do
       q(%Q(number), Term::Dict[])
       q(%Q(number), Term::Dict[Term::Num[1], Term::Num[2]])
       q(%Q(number), Term::Dict[a: Term::Num[1], b: Term::Num[2]])
+      q(%Q(123_456), Term::Num.new(123_456), 0)
+      q(%Q(123_456), Term::Num.new(100))
     end
 
     it "should support type bool" do

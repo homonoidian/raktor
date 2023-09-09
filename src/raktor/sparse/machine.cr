@@ -95,8 +95,7 @@ module Raktor::Sparse::Machine
   struct IR
     def initialize(
       @tape : Array(Instr),
-      @numbers : Array(Term::Num),
-      @strings : Array(Term::Str),
+      @terms : Array(Term),
       @labels : Array(Set(Label)),
       @jumptables : Array(JumpTable)
     )
@@ -114,9 +113,7 @@ module Raktor::Sparse::Machine
 
     # Returns the constant at *addr* without doing any safety checks.
     def ldconst!(addr : Int32)
-      {@numbers, @strings}
-        .unsafe_fetch(addr >> 28)
-        .unsafe_fetch(addr & 0x0fffffff)
+      @terms.unsafe_fetch(addr)
     end
 
     # Returns the label set at *addr* without doing any safety checks.
@@ -153,10 +150,8 @@ module Raktor::Sparse::Machine
       io << <<-END
         <LinearIR>
           <Constants>
-            Numbers:
-            #{to_s_lines(@numbers, &.itself).join("\n    ")}
-            Strings:
-            #{to_s_lines(@strings, &.itself).join("\n    ")}
+            Terms:
+            #{to_s_lines(@terms, &.itself).join("\n    ")}
             Labels:
             #{to_s_lines(@labels, &.itself).join("\n    ")}
           </Constants>
@@ -272,7 +267,7 @@ module Raktor::Sparse::Machine
           ip = lt(x, y, ip + 1, instr.a0)
           next
         in .attrj?
-          if value = a.as(Term::Dict)[b]?
+          if value = a.as(Term::Dict).getattr?(b)
             @stack << a
             a = value
             ip = instr.a0

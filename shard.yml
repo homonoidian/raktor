@@ -4,6 +4,12 @@ version: 0.1.0
 authors:
   - Alexey Yurchenko <homonoidian@yandex.ru>
 
+dependencies:
+  disruptor:
+    github: nolantait/disruptor.cr
+  cannon:
+    github: Papierkorb/cannon
+
 targets:
   raktor:
     main: src/raktor.cr
