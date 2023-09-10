@@ -67,6 +67,10 @@ have to do any kind of subscribing by hand. How your objects communicate determi
 as a mass-notifier; it notifies *everyone* of the change. Of course it doesn't do that because that would be too
 inefficient, but please please think about it this way. Otherwise I don't think it's possible to *get* the system)
 
+## Diagram
+
+![Diagram](/etc/diagram.svg)
+
 ## Installation
 
 TODO: Write installation instructions here
