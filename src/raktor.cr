@@ -1,5 +1,11 @@
+require "disruptor"
+require "cannon"
+
 require "./ext/*"
-require "./raktor/*"
+require "./raktor/term"
+require "./raktor/protocol"
+require "./raktor/sparse"
+require "./raktor/map_server"
 
 # TODO: Write documentation for `Raktor`
 module Raktor

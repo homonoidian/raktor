@@ -62,6 +62,10 @@ abstract class Raktor::Term
       TermIR.new(typeid, @value)
     end
 
+    def +(other : Num)
+      Num.new(value + other.value)
+    end
+
     def <(other : Num)
       value < other.value
     end
