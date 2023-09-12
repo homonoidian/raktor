@@ -1,17 +1,23 @@
+require "colorize"
+
 module Raktor
   struct Chan(T)
     include Protocol::IEndpoint(T)
 
-    def initialize
-      @queue = Disruptor::Queue(T).new(4096, Disruptor::WaitWithSpin.new)
+    def initialize(@capacity : Int32 = 2**8)
+      # @queue = Disruptor::Queue(T).new(@capacity, Disruptor::WaitWithYield.new)
+      @queue = Channel(T).new(@capacity)
+      # I hate that channel blocks but it's the only thing that doesn't break,
+      # overflow, or do any other kinky shit these kinds of data structures
+      # tend to do under heavy load.
     end
 
     def send(object : T)
-      @queue.push(object)
+      @queue.send(object)
     end
 
     def receive : T
-      @queue.pop
+      @queue.receive
     end
   end
 
@@ -19,19 +25,32 @@ module Raktor
     include Protocol
 
     struct Mediator
-      def initialize(@parcel : IParcel)
+      def initialize(@server : MapServer, @parcel : IParcel)
       end
 
-      def sense(id : UInt64, program : String)
-        @parcel.reply(@parcel.sender, Message[Opcode::RegisterSensor, id, Term::Str.new(program)])
+      private def genid(name : Symbol)
+        if @server.@env[name]?
+          raise ArgumentError.new("#{name} is already registered")
+        end
+        id = @server.@env[name] = @server.genid
+        @server.@reverse_env[id] = name
+        id
       end
 
-      def appearance(id : UInt64)
-        @parcel.reply(@parcel.sender, Message[Opcode::RegisterAppearance, id])
+      private def idof(name : Symbol)
+        @server.@env[name]
       end
 
-      def appear(id : UInt64, term : Term)
-        @parcel.reply(@parcel.sender, Message[Opcode::SetAppearance, id, term])
+      def senses(name : Symbol, program : String)
+        @parcel.reply(@parcel.sender, Message[Opcode::RegisterSensor, genid(name), Term::Str.new(program)])
+      end
+
+      def appears_as(name : Symbol)
+        @parcel.reply(@parcel.sender, Message[Opcode::RegisterAppearance, genid(name)])
+      end
+
+      def set(name : Symbol, term : Term)
+        @parcel.reply(@parcel.sender, Message[Opcode::SetAppearance, idof(name), term])
       end
 
       def to_s(io)
@@ -67,7 +86,24 @@ module Raktor
     def on_init_appearance(&@on_init_appearance : Mediator ->)
     end
 
-    def on_sense(&@on_sense : Term, Mediator, UInt64 ->)
+    def on_sense(&@on_sense : Term, Mediator, Symbol? ->)
+    end
+
+    @env = Hash(Symbol, UInt64).new
+    @reverse_env = Hash(UInt64, Symbol).new
+
+    private def mediate(med, cb)
+      mediator = Mediator.new(self, med)
+      cb.call(mediator)
+    end
+
+    protected def genid
+      if @free.empty?
+        raise "TODO: request more ids (ran out of server-allocated unique ids)"
+      end
+      id = @free.sample
+      @free.delete(id)
+      id
     end
 
     def spawn
@@ -82,12 +118,9 @@ module Raktor
             reply(med, Opcode::AcceptUniqueIdRange, b, e)
           in .accept_unique_id_range?
             next unless b = message.args[0]?
-            next unless e = message.args[0]?
+            next unless e = message.args[1]?
             @free.concat(b...e)
-            @on_init.try do |cb|
-              mediator = Mediator.new(med)
-              cb.call(mediator)
-            end
+            @on_init.try { |cb| mediate(med, cb) }
           in .register_sensor?
             next unless id = message.args[0]?
             next unless t0 = message.terms[0]?.as?(Term::Str)
@@ -97,10 +130,7 @@ module Raktor
           in .init_sensor?
             next unless id = message.args[0]?
             @used << id
-            @on_init_sensor.try do |cb|
-              mediator = Mediator.new(med)
-              cb.call(mediator)
-            end
+            @on_init_sensor.try { |cb| mediate(med, cb) }
           in .register_appearance?
             next unless id = message.args[0]?
             @appearances[id] = nil
@@ -108,10 +138,7 @@ module Raktor
           in .init_appearance?
             next unless id = message.args[0]?
             @used << id
-            @on_init_appearance.try do |cb|
-              mediator = Mediator.new(med)
-              cb.call(mediator)
-            end
+            @on_init_appearance.try { |cb| mediate(med, cb) }
           in .unregister_sensor?
             next unless id = message.args[0]?
             @map.delete(Sensor.new(id, med.sender))
@@ -132,8 +159,8 @@ module Raktor
             next unless id = message.args[0]?
             next unless term = message.terms[0]?
             @on_sense.try do |cb|
-              mediator = Mediator.new(med)
-              cb.call(term, mediator, id)
+              mediator = Mediator.new(self, med)
+              cb.call(term, mediator, @reverse_env[id]?)
             end
           end
         end

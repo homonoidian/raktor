@@ -6,39 +6,44 @@ include Raktor::Protocol
 
 host = MapServer.new
 
-# FIXME: this works but suffers from queue overflow. counter is too fast
-#        for isprime. therefore the program breaks down after a while,
-#        randomly. implementing backpressure should help
+# What you see below is total nonsense Raktor-wise, no kernels, no mappers,
+# no philosophy, nothing; what's below is just to prove that the thing could
+# be put together in a way that "essentially" works.
 #
-# TODO: ids should bot be provided by hand!!!
+# Without things like constraints, we can't do any proper recursion (aka
+# feedback here in Raktor), and therefore can't find prime numbers
+# "domestically" (yet!)
+
+# { n < 2 }           not prime
+# { n: 2 }            prime
+# { n /? I, i: I }    not prime
+# { n: N, i ^ 2 > N } prime
+# ...?
 
 # Counter reacts to itself in a feedback, increments a number.
-
 counter = MapServer.new
 counter.on_init do |mediator|
-  mediator.sense(0, %(number))
-  mediator.appearance(1)
+  mediator.senses(:start, %(number))
+  mediator.appears_as(:counter)
 end
 
 counter.on_init_appearance do |mediator|
-  mediator.appear(1, Term::Num.new(0))
+  mediator.set(:counter, Term::Num.new(0)) # Kickstart at zero
 end
 
-counter.on_sense do |term, mediator, sensor|
-  next unless sensor == 0
+counter.on_sense do |term, mediator|
   count = term.as(Term::Num)
-  mediator.appear(1, count + Term::Num.new(1))
+  mediator.set(:counter, count + Term::Num.new(1))
 end
 
-# Printer simply prints every prime number
+# Printer prints every prime number
 
 prime_printer = MapServer.new
 prime_printer.on_init do |mediator|
-  mediator.sense(2048, %({ prime: true, value: number }))
+  mediator.senses(:prime_number, %({ prime: true, value: number }))
 end
 
-prime_printer.on_sense do |term, mediator, sensor|
-  next unless sensor == 2048
+prime_printer.on_sense do |term, mediator|
   dict = term.as(Term::Dict)
   puts "Prime: #{dict.getattr?(Term::Str.new("value"))}"
 end
@@ -47,14 +52,13 @@ end
 
 isprime = MapServer.new
 isprime.on_init do |mediator|
-  mediator.sense(1024, %(number))
-  mediator.appearance(1025)
+  mediator.senses(:some_number, %(number))
+  mediator.appears_as(:primeness_marked_number)
 end
 
-isprime.on_sense do |term, mediator, sensor|
-  next unless sensor == 1024
+isprime.on_sense do |term, mediator|
   number = term.as(Term::Num)
-  mediator.appear(1025, Term::Dict[prime: Term::Bool.new(number.value.prime?), value: number])
+  mediator.set(:primeness_marked_number, Term::Dict[prime: Term::Bool.new(number.value.prime?), value: number])
 end
 
 router = NamedParcelEndpointRouter.new
