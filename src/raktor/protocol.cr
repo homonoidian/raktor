@@ -6,16 +6,31 @@ module Raktor::Protocol
     abstract def sender : UInt64
     abstract def receiver : UInt64
     abstract def message : Message
+    abstract def disconnect
+
+    def reply(message : Message)
+      reply(sender, message)
+    end
+
+    def_equals_and_hash sender, receiver, message
   end
 
   module IRouter(T)
-    abstract def assign(id : UInt64, object : T)
-    abstract def drop(id : UInt64)
+    # abstract def assign(id : UInt64, object : T)
+    # abstract def drop(id : UInt64)
     abstract def send(sender : UInt64, receiver : UInt64, message : Message)
+    abstract def disconnect(id : UInt64)
+
+    def connect(sender, receiver)
+      send(sender, receiver, Message[Opcode::Connect])
+    end
   end
 
   module IEndpoint(T)
     abstract def send(object : T)
+
+    def disconnect
+    end
   end
 
   alias IParcelEndpoint = IEndpoint(IParcel)
@@ -26,27 +41,38 @@ module Raktor::Protocol
     def reply(id : UInt64, message : Message)
       router.send(receiver, id, message)
     end
+
+    def disconnect
+      router.disconnect(sender)
+    end
   end
 
   module IHashParcelRouter(T)
     include IRouter(IParcelEndpoint)
 
     def initialize
-      @hash = {} of UInt64 => IParcelEndpoint
+      @routes = {} of UInt64 => IParcelEndpoint
     end
 
     abstract def map(object : T) : UInt64
 
     def assign(id : UInt64, object : IParcelEndpoint)
-      @hash[id] = object
+      @routes[id] = object
     end
 
     def drop(id : UInt64)
-      @hash.delete(id)
+      @routes.delete(id)
+    end
+
+    def disconnect(id : UInt64)
+      return unless endpoint = @routes[id]?
+
+      endpoint.disconnect
+      drop(id)
     end
 
     def send(sender : UInt64, receiver : UInt64, message : Message)
-      return unless endpoint = @hash[receiver]?
+      return unless endpoint = @routes[receiver]?
 
       endpoint.send RouterParcel.new(self, sender, receiver, message)
     end
@@ -59,12 +85,16 @@ module Raktor::Protocol
       drop(map(id))
     end
 
+    def disconnect(id : T)
+      disconnect(map(id))
+    end
+
     def send(sender : T, receiver : T, message : Message)
       send(map(sender), map(receiver), message)
     end
   end
 
-  struct ParcelEndpointRouter
+  class ParcelEndpointRouter
     include IHashParcelRouter(UInt64)
 
     def map(object : UInt64) : UInt64
@@ -72,7 +102,7 @@ module Raktor::Protocol
     end
   end
 
-  struct NamedParcelEndpointRouter
+  class NamedParcelEndpointRouter
     include IHashParcelRouter(Symbol)
 
     @env = {} of Symbol => UInt64
@@ -88,6 +118,9 @@ module Raktor::Protocol
   end
 
   enum Opcode : UInt8
+    Connect
+    Disconnect
+
     RegisterSensor
     RegisterAppearance
 
@@ -99,10 +132,14 @@ module Raktor::Protocol
     RequestUniqueIdRange
     AcceptUniqueIdRange
 
+    InitSelf
     InitSensor
     InitAppearance
 
     Sense
+
+    Ping
+    Pong
 
     def to_cannon_io(io)
       value.to_cannon_io(io)

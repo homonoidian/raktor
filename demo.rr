@@ -1,0 +1,55 @@
+Counter
+  senses { target: "Counter", count < 10_000 }
+  tweaks count: count + 1
+  shows { target: "Counter", count: 0 } as default and remnant
+
+IsPrime
+  senses { target: "IsPrime", value: number } not({ prime: any }) as
+    num: value
+    den: 2
+  senses { target: "IsPrime", num: number, den: number }
+  tweaks
+    equal: num = den
+    divBy: num /? den
+  shows
+    { num < 2 } as { target: "IsPrime", value: num, prime: false }
+    { equal: true } as { target: "IsPrime", value: num, prime: true }
+    { divBy: true } as { target: "IsPrime", value: num, prime: false }
+    result
+
+CounterIsPrime
+  senses { target: "Counter", count: number }] as count
+  shows { target: "IsPrime", value: _ }
+
+PrimePrinter
+  senses { target: "IsPrime", prime: true }
+  tweaks @display(_)
+
+
+## Grammar
+
+top       ::= node*
+node      ::= identifier (senses | tweaks | shows)*
+senses    ::= "senses" filter ["as" mapper]
+tweaks    ::= "tweaks" kernel
+shows     ::= "shows" (showdef | INDENT showdef+ DEDENT)
+showdef   ::= filter "as" [showopts] mapper
+showopts  ::= showopt ("and" showopt)*
+showopt   ::= "default" | "remnant"
+filter    ::= <sparse>
+mapper    ::= (mapstmt | retval) | INDENT mapstmt+ [retval] DEDENT
+kernel    ::= (kstmt | retval) | INDENT kstmt+ [retval] DEDENT
+retval    ::= exp
+mapstmt   ::= setattr
+kstmt     ::= setattr | extern
+setattr   ::= identifier ":" exp
+extern    ::= "@" identifier "(" [exp ("," exp)*] )"
+exp       ::= conj
+conj      ::= disj ["and" conj]
+disj      ::= mag ["or" disj]
+mag       ::= sum [("=" | "<" | ">" | "<=" | ">=" | "/?") sum]
+sum       ::= fac [("+" | "-") sum]
+fac       ::= pow [("*" | "/" | "%") fac]
+pow       ::= getattr [("**") pow]
+getattr   ::= atom ["." getattr]
+atom      ::= identifier | number | string | bool | dict | "_"

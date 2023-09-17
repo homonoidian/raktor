@@ -35,10 +35,17 @@ module Raktor::Sparse
       self
     end
 
-    # Removes all labels from this set that are present in *candidates*.
+    # Removes all labels from this set that are present in *delete*.
     # Returns whether this set is empty afterwards.
-    def reject?(candidates : Set(Label)) : Bool
-      @labels.reject! { |label| label.in?(candidates) }
+    def reject?(delete : Set(Label)) : Bool
+      @labels.reject! &.in?(delete)
+      @labels.empty?
+    end
+
+    # Removes all labels from this set that are not present in *keep*.
+    # Returns whether this set is empty afterwards.
+    def select?(keep : Set(Label)) : Bool
+      @labels.reject! { |label| !label.in?(keep) }
       @labels.empty?
     end
 

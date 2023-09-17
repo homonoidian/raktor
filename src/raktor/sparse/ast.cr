@@ -18,6 +18,7 @@ module Raktor::Sparse
   # AST node for a number literal, such as `1.23`, `-100_000`, or `10`.
   struct AST::Num
     include Node
+    include Terms
 
     def initialize(@value : Float64)
     end
@@ -32,7 +33,7 @@ module Raktor::Sparse
 
     def compile(chain : Chain, book : RuleBook) : Label
       chain.append(Gate::IsNum.new)
-      chain.append(Gate::Exact.new(Term::Num.new(@value)))
+      chain.append(Gate::Exact.new(Terms::Num[@value]))
       chain.append(book.newlabel)
     end
 
@@ -50,7 +51,7 @@ module Raktor::Sparse
 
     def compile(chain : Chain, book : RuleBook) : Label
       chain.append(Gate::IsStr.new)
-      chain.append(Gate::Exact.new(Term::Str.new(@value)))
+      chain.append(Gate::Exact.new(Terms::Str[@value]))
       chain.append(book.newlabel)
     end
 
@@ -68,7 +69,7 @@ module Raktor::Sparse
 
     def compile(chain : Chain, book : RuleBook) : Label
       chain.append(Gate::IsBool.new)
-      chain.append(Gate::Exact.new(Term::Bool.new(@value)))
+      chain.append(Gate::Exact.new(Terms::Boolean[@value]))
       chain.append(book.newlabel)
     end
 

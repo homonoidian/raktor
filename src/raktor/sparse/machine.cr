@@ -170,8 +170,6 @@ module Raktor::Sparse::Machine
   # explores what was before "a filter system", and now is a NFA-ish
   # jump madness.
   struct VM
-    include Raktor
-
     @stack = [] of Term
 
     # Returns the sign bit of *n*.

@@ -4,7 +4,7 @@ module Raktor
   struct Chan(T)
     include Protocol::IEndpoint(T)
 
-    def initialize(@capacity : Int32 = 2**8)
+    def initialize(@capacity : Int32 = 2**16)
       # @queue = Disruptor::Queue(T).new(@capacity, Disruptor::WaitWithYield.new)
       @queue = Channel(T).new(@capacity)
       # I hate that channel blocks but it's the only thing that doesn't break,
@@ -13,10 +13,12 @@ module Raktor
     end
 
     def send(object : T)
+      # @queue.push(object)
       @queue.send(object)
     end
 
     def receive : T
+      # @queue.pop
       @queue.receive
     end
   end

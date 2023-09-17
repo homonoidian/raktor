@@ -16,14 +16,14 @@ def q(query : String, term : Term)
   q(query, term, Set(Int32).new)
 end
 
-def mq(map : Sparse::Map(T), term : Term, matches : Enumerable(Int32)) forall T
+def mq(map : Sparse::Map(T) | Sparse::Map::UpsertQuery(T), term : Term, matches : Enumerable(Int32)) forall T
   map[term, Set(Int32).new].should eq(matches.to_set)
 end
 
-def mq(map : Sparse::Map(T), term : Term, *matches : Int32) forall T
+def mq(map : Sparse::Map(T) | Sparse::Map::UpsertQuery(T), term : Term, *matches : Int32) forall T
   mq(map, term, Set{*matches})
 end
 
-def mq(map : Sparse::Map(T), term : Term) forall T
+def mq(map : Sparse::Map(T) | Sparse::Map::UpsertQuery(T), term : Term) forall T
   mq(map, term, Set(Int32).new)
 end

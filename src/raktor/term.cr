@@ -1,54 +1,77 @@
-struct Raktor::TermIR
-  include Cannon::Auto
+module Raktor
+  struct TermIR
+    include Cannon::Auto
 
-  def initialize(@typeid : UInt8, @arg : String | Float64? = nil, @children = [] of TermIR)
-  end
+    def initialize(@typeid : UInt8, @arg : String | Float64? = nil, @children = [] of TermIR)
+    end
 
-  def to_term
-    case @typeid
-    when Term::TypeID::NUM
-      Term::Num.new(@arg.as(Float64))
-    when Term::TypeID::STR
-      Term::Str.new(@arg.as(String))
-    when Term::TypeID::BOOL
-      Term::Bool.new(!@arg.nil?)
-    when Term::TypeID::DICT
-      dict = Term::Dict.new
-      0.step(to: @children.size, by: 2, exclusive: true) do |k|
-        kt = @children[k].to_term
-        vt = @children[k + 1].to_term
-        if kt.is_a?(Term::Str) || kt.is_a?(Term::Num)
-          dict = dict.putattr(kt, vt)
+    def to_term
+      case @typeid
+      when Term::TypeID::NUM
+        Terms::Num.new(@arg.as(Float64))
+      when Term::TypeID::STR
+        Terms::Str.new(@arg.as(String))
+      when Term::TypeID::BOOL
+        Terms::Boolean.new(!@arg.nil?)
+      when Term::TypeID::DICT
+        dict = Terms::Dict.new
+        0.step(to: @children.size, by: 2, exclusive: true) do |k|
+          kt = @children[k].to_term
+          vt = @children[k + 1].to_term
+          if kt.is_a?(Terms::Str) || kt.is_a?(Terms::Num)
+            dict = dict.putattr(kt, vt)
+          end
         end
+        dict
+      else
+        raise ArgumentError.new
       end
-      dict
-    else
-      raise ArgumentError.new
     end
   end
-end
 
-abstract class Raktor::Term
-  module TypeID
-    NUM  = 0u8
-    STR  = 1u8
-    BOOL = 2u8
-    DICT = 3u8
+  module Terms
   end
 
-  def self.[](value)
-    new(value)
+  abstract class Term
+    include Terms
+
+    module TypeID
+      NUM  = 0u8
+      STR  = 1u8
+      BOOL = 2u8
+      DICT = 3u8
+    end
+
+    def self.[](value)
+      new(value)
+    end
+
+    def as_d
+      as(Dict)
+    end
+
+    def as_n
+      as(Num)
+    end
+
+    def as_s
+      as(Str)
+    end
+
+    def as_b
+      as(Boolean)
+    end
+
+    def to_cannon_io(io)
+      to_ir.to_cannon_io(io)
+    end
+
+    def self.from_cannon_io(io)
+      TermIR.from_cannon_io(io).to_term
+    end
   end
 
-  def to_cannon_io(io)
-    to_ir.to_cannon_io(io)
-  end
-
-  def self.from_cannon_io(io)
-    TermIR.from_cannon_io(io).to_term
-  end
-
-  class Num < Term
+  class Terms::Num < Term
     getter value
 
     def initialize(@value : Float64)
@@ -66,6 +89,22 @@ abstract class Raktor::Term
       Num.new(value + other.value)
     end
 
+    def -(other : Num)
+      Num.new(value - other.value)
+    end
+
+    def *(other : Num)
+      Num.new(value * other.value)
+    end
+
+    def /(other : Num)
+      Num.new(value / other.value)
+    end
+
+    def div_by?(other : Num) : Bool
+      value % other.value == 0
+    end
+
     def <(other : Num)
       value < other.value
     end
@@ -77,10 +116,11 @@ abstract class Raktor::Term
     def_equals_and_hash @value
   end
 
-  class Str < Term
-    getter value
+  class Terms::Str < Term
+    getter value : String
 
-    def initialize(@value : String)
+    def initialize(value)
+      @value = value.to_s
     end
 
     def typeid
@@ -98,10 +138,10 @@ abstract class Raktor::Term
     def_equals_and_hash @value
   end
 
-  class Bool < Term
+  class Terms::Boolean < Term
     getter value
 
-    def initialize(@value : ::Bool)
+    def initialize(@value : Bool)
     end
 
     def typeid
@@ -119,7 +159,7 @@ abstract class Raktor::Term
     def_equals_and_hash @value
   end
 
-  class Dict < Term
+  class Terms::Dict < Term
     getter value
 
     def initialize(@value = {} of Term => Term)
@@ -142,13 +182,13 @@ abstract class Raktor::Term
     end
 
     def self.[](*items : Term)
-      new(items.map_with_index { |item, index| {Term::Num.new(index).as(Term), item.as(Term)} }.to_h)
+      new(items.map_with_index { |item, index| {Num.new(index).as(Term), item.as(Term)} }.to_h)
     end
 
     def self.[](**kvs : Term)
       dict = new
       kvs.each do |k, v|
-        dict = dict.putattr(Term::Str.new(k.to_s), v)
+        dict = dict.putattr(Str.new(k.to_s), v)
       end
       dict
     end
@@ -157,9 +197,17 @@ abstract class Raktor::Term
       @value[k]?
     end
 
+    def getattr(k : Term)
+      @value[k]
+    end
+
     def putattr(k : Term, v : Term)
       @value[k] = v
       self
+    end
+
+    macro method_missing(call)
+      @value[Str.new({{call.id.stringify}})]
     end
 
     def to_s(io)

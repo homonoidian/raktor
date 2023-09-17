@@ -8,13 +8,32 @@
 # should *really* be affected. Then give update commands to the respective
 # managers.
 #
+# There is *obviously* a lot of optimization that I haven't done yet.
+# Mostly speaking about compilation here. The runtime uses integer sets
+# and integer hashes heavily, so this could be a point where maybe some
+# better solution exists. ConjTree looks like and walks like and quacks
+# like a trie, factset is basically an intset etc. Something like a vab
+# bitarray would be really nice for the fact set specifically; the universe
+# is fixed and is limited to the number of used labels (which I think would
+# rarely exceed a few million, and that's planning for the future -- right
+# now it rarely exceeds a hundred or so); each label can be assigned a bit
+# and there we go, getting super fast "inserts", "deletes", and reasonably
+# fast iteration. Memory considerations don't worry me too much because we're
+# compiling anyway, so we're storing once, not on every lookup. Just thinking...
+# All of that could, maybe just maybe, get us closer to the target of sub
+# 100ns or so for lookup. But I have always been wrong on estimating the
+# result of optimizations, so maybe I'm wrong this time too :) Anyway,
+# notably, the current solutions hang most in hashes/sets (judging by the profile).
+#
 # Ryzen 2200G
 #
-# Compilation of 200 000 + 1 programs took: 2537.831687ms
-#      lookup name age ok  70.90  ( 14.10ms) (± 3.48%)  2.29MB/op   24453.37× slower
-#    lookup name age fail   1.73M (576.76ns) (±29.90%)    592B/op            fastest
-# lookup name lit age lit   1.33M (753.17ns) (±26.85%)    608B/op       1.31× slower
-#                lookup n  10.70  ( 93.44ms) (±18.32%)  51.9MB/op  162005.04× slower
+# Compilation of 200 000 + 1 programs took: 2498.659032ms
+#      lookup name age ok  73.35  ( 13.63ms) (± 3.23%)  2.29MB/op   31175.13× slower
+#    lookup name age fail   1.67M (599.84ns) (±28.60%)    592B/op       1.37× slower
+# lookup name lit age lit   1.27M (787.57ns) (±25.50%)    608B/op       1.80× slower
+#        lookup 1 n first   2.27M (439.58ns) (±29.85%)    544B/op       1.01× slower
+#         lookup 1 n last   2.29M (437.31ns) (±30.21%)    544B/op            fastest
+#                lookup n  10.88  ( 91.88ms) (±17.74%)  51.9MB/op  210109.25× slower
 
 require "benchmark"
 require "../src/raktor"
@@ -44,6 +63,14 @@ Benchmark.ips do |x|
   x.report("lookup name lit age lit") do
     dict = Term::Dict[name: Term::Str.new("John Doe"), age: Term::Num.new(23)]
     map[dict]
+  end
+
+  x.report("lookup 1 n first") do
+    map[Term::Dict[n: Term::Num.new(0)]]
+  end
+
+  x.report("lookup 1 n last") do
+    map[Term::Dict[n: Term::Num.new(100_000 - 1)]]
   end
 
   x.report("lookup n") do

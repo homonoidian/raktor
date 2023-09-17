@@ -223,6 +223,23 @@ module Raktor::Sparse
          BookRewriter::UnusedRuleRemover.new},
         unify: false
       )
+
+      # Cleanup equations: remove dead labels from them and if the
+      # equation is empty afterward, reject it.
+      seen = Set(Label).new
+
+      each_tagset_with_label do |_, label|
+        seen << label
+      end
+
+      each_rule_with_label do |rule, label|
+        seen << label
+        rule.each_arg do |arg|
+          seen << arg
+        end
+      end
+
+      @equations.reject! &.select?(seen)
     end
 
     # Mutably collates this and *other* rule books, this book is mutated.

@@ -112,8 +112,10 @@ module Raktor::Sparse
     # Compiles and collates *program* into this map. After this method
     # this map's global book and filter are going to be updated, but
     # they won't work optimally. One must
-    private def collate(key : Key, program : String)
+    private def collate(key : Key, program : String, &)
       compile(key, program, @_collate_filter, @_collate_book)
+
+      yield @_collate_filter, @_collate_book
 
       @book.collate(@_collate_book)
       @filter.collate(@_collate_filter)
@@ -125,36 +127,40 @@ module Raktor::Sparse
     @_apply_freq = Hash(Label, Int32).new(0)
     @_apply_args = [] of {Int32, Label}
 
-    # Updates the compiled version of this map. Most notably, the
-    # compiled version is queried in `[]`.
-    private def invalidate
-      return unless @batch.zero?
-
-      ir = Compiler.compile(@filter)
+    private def compile(vm, filter, book, conj)
+      ir = Compiler.compile(filter)
 
       # Compute the tally of arguments of "and" rules (suppose there
       # are no "or" rules anymore).
-      @book.each_rule_with_label(Rule::Comb::And) do |rule, label|
+      book.each_rule_with_label(Rule::Comb::And) do |rule, label|
         rule.each_arg { |arg| @_apply_freq.update(arg, &.succ) }
       end
 
-      @conj.clear
+      conj.clear
 
       # Populate the conjunction tree based on the frequency of
       # arguments, so that the arguments that are most frequent
       # come first (and therefore group more rules together).
-      @book.each_rule_with_label(Rule::Comb::And) do |rule, label|
-        tree = @conj
+      book.each_rule_with_label(Rule::Comb::And) do |rule, label|
+        tree = conj
         rule.each_arg_by(@_apply_freq, reuse: @_apply_args) do |arg|
           tree = tree.append(arg)
         end
         tree.then(label)
       end
 
-      @compiled = Compiled.new(@vm, ir, @conj, @book)
+      Compiled.new(vm, ir, conj, book)
     ensure
       @_apply_freq.clear
       @_apply_args.clear
+    end
+
+    # Updates the compiled version of this map. Most notably, the
+    # compiled version is queried in `[]`.
+    private def invalidate
+      return unless @batch.zero?
+
+      @compiled = compile(@vm, @filter, @book, @conj)
     end
 
     @batch = 0
@@ -210,7 +216,7 @@ module Raktor::Sparse
     def []=(key : Key, program : String)
       batch do
         delete(key) unless @keys.add?(key)
-        collate(key, program)
+        collate(key, program) { }
 
         @book.swap_equations(@filter)
         @book.rewrite
@@ -237,7 +243,34 @@ module Raktor::Sparse
       batch do
         keys.zip(programs) do |key, program|
           delete(key) unless @keys.add?(key)
-          collate(key, program)
+          collate(key, program) { }
+        end
+
+        @book.swap_equations(@filter)
+        @book.rewrite
+      end
+    end
+
+    # Object which you can use to query the "intermediate map"
+    # in `upsert`.
+    struct UpsertQuery(Key)
+      def initialize(@compiled : Compiled(Key))
+      end
+
+      # Same as `Map#[]`.
+      def [](term : Term | Enumerable(Term), report : IReport(Key) = [] of Key) : IReport(Key)
+        @compiled.query(term, report)
+
+        report
+      end
+    end
+
+    def upsert(key : Key, program : String, & : UpsertQuery(Key) ->)
+      batch do
+        delete(key) unless @keys.add?(key)
+        collate(key, program) do |filter, book|
+          compiled = compile(@vm, filter, book, ConjTree.new)
+          yield UpsertQuery.new(compiled)
         end
 
         @book.swap_equations(@filter)
@@ -288,7 +321,7 @@ module Raktor::Sparse
     # map.empty? # => true
     # ```
     def delete(key : Key) : Bool
-      return false unless key.in?(@keys)
+      return false unless @keys.delete(key)
 
       @book.untag(key)
       @filter.cleanup
