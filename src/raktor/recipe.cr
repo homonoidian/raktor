@@ -1,5 +1,5 @@
 module Raktor
-  # A crude DpSL for describing nodes in Crystal.
+  # A crude DSL for describing Raktor nodes in Crystal.
   #
   # See `Node.should` for an example.
   class Node::Recipe
@@ -10,11 +10,7 @@ module Raktor
     struct Sensor
       getter filter, mapper, slot
 
-      def initialize(
-        @filter : String,
-        @mapper : Term -> Term,
-        @slot : Int32
-      )
+      def initialize(@filter : String, @mapper : Term -> Term, @slot : Int32)
       end
 
       def_equals_and_hash slot
@@ -60,8 +56,8 @@ module Raktor
       @appearances.each { |appearance| yield appearance }
     end
 
-    # Creates and returns an appearance relationship object with the
-    # given *group id* and *ordinal*.
+    # Creates and returns an appearance relationship with the given
+    # *group id* and *ordinal*.
     #
     # Appearances whose *group ids* are the same are treated as mutually
     # exclusive. In such case, if multiple appearances match, the first-
@@ -73,6 +69,12 @@ module Raktor
     end
 
     # Will define a sensor with the given *filter* and *mapper*.
+    #
+    # Beware that *mapper* isn't supposed to fail; normally we'd ensure
+    # that using a compile-time check. Here we obviously can't do that,
+    # so here be dragons. The fiber that's running the mapper (basically
+    # the fiber that's running the node you're putting this sensor on)
+    # will crash.
     #
     # ```
     # Node.should do
@@ -93,6 +95,10 @@ module Raktor
     # that appearance filters are turned inward (toward the node's kernel),
     # and mappers are turned outward (toward the world).
     #
+    # As in `sense`, *mapper* isn't supposed to fail. See `sense` to
+    # learn more about this.
+    #
+    #
     # ```
     # Node.should do
     #   sense "number"
@@ -101,15 +107,23 @@ module Raktor
     # end
     # ```
     #
-    # *default* term is sent right after the appearance is initialized. It could
-    # be particularly useful if you want to kick-start a feedback.
+    # *default* term is sent right after the appearance is initialized. It
+    # could be particularly useful if you want to kick-start a feedback. A
+    # hacky way to do that would be to do it like so:
+    #
+    # ```
+    # Node.should do
+    #   # ...
+    #   show "not(any)", default: # <Here goes your starter term>
+    # end
+    # ```
     #
     # *remnant* term is the term left after this appearance disappears for
     # whatever reason. You can use *remnant* to tell everyone who's looking
     # that the appearance is no longer there, preventing stale state etc.
     #
-    # *rel* specifies how the appearance will relate to all other appearances
-    # of the same node. See `relate`.
+    # *rel* specifies how the appearance will relate to the other
+    # appearances of the same node. See `relate`.
     def show(
       filter : String = "any",
       default : Term? = nil,
@@ -135,13 +149,15 @@ module Raktor
     # ```
     # Node.should do
     #   sense %({ n: number }), &.as_d.n
-    #   tweak { |n| n * Num[2] }
+    #   tweak(Num) { |n| n * Num[2] }
     #   show "> 100"
     # end
     # ```
     def tweak(&@kernel : Term, Control -> Term?)
     end
 
+    # Same as `tweak` but casts input term to *cls* for you. Beware that
+    # the cast isn't supposed to fail, see `sense` to learn more.
     def tweak(cls : T.class, &kernel : T, Control -> Term?) forall T
       tweak { |term, ctrl| kernel.call(term.as(T), ctrl) }
     end

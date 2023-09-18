@@ -1,28 +1,5 @@
-require "http"
-require "uuid"
-require "io/hexdump"
-require "./src/raktor"
-
-class Raktor::Node
-end
-
-require "./src/raktor/recipe"
-
 module Raktor
   include Protocol
-
-  module Role
-    abstract def handle(parcel : Parcel)
-    abstract def kill
-  end
-
-  class Node::Control
-    getter? disconnect = false
-
-    def disconnect
-      @disconnect = true
-    end
-  end
 
   struct Remote
     include IParcelEndpoint
@@ -38,8 +15,8 @@ module Raktor
     rescue IO::Error
     end
 
-    def disconnect
-      @socket.close
+    def disconnect(endpoint : IParcelEndpoint)
+      @socket.close # ???
     end
 
     def to_s(io)
@@ -53,11 +30,11 @@ module Raktor
     include IParcelEndpoint
 
     def initialize(@roles : Array(Role))
-      @inbox = Chan(Parcel).new
+      @inbox = Inbox(Parcel).new
     end
 
-    # A crude DSL for describing nodes in Crystal. For the
-    # available methods see `Recipe`.
+    # A crude DSL for describing nodes in Crystal. For the available
+    # methods see `Recipe`.
     #
     # ```
     # Node.should do
@@ -84,8 +61,6 @@ module Raktor
     end
 
     def join(uri : URI)
-      # convert uri to (remote impls iparcelendpoint)
-      # initiatlize with join(iparcelendpoint)
       spawn do
         socket = HTTP::WebSocket.new(uri)
         remote = Remote.new(socket)
@@ -130,6 +105,7 @@ module Raktor
     end
 
     # Todo: give control of the server to the outside world
+    # Todo: how to bridge between worlds securely?
 
     def receive(parcel : Parcel)
       @inbox.send(parcel)
@@ -141,24 +117,12 @@ module Raktor
           @roles.each &.handle(parcel)
         end
       rescue e : Exception
-        @roles.each &.kill
+        @roles.each &.cut
         raise e
       end
     end
 
     def_equals_and_hash object_id
-  end
-
-  record KeepConn, sender : IParcelEndpoint, receiver : IParcelEndpoint do
-    def reuse(message : Message)
-      sender.receive Parcel.new(sender, receiver, message)
-    end
-
-    def reply(message : Message)
-      sender.receive Parcel.new(receiver, sender, message)
-    end
-
-    def_equals_and_hash sender, receiver
   end
 
   class Node::Role::PingSender
@@ -179,15 +143,15 @@ module Raktor
     end
 
     private def keep
-      receivers = Set(KeepConn).new
-      generation = Set(KeepConn).new
+      receivers = Set(Link).new
+      generation = Set(Link).new
 
       while true
         select
         when @killswitch.receive
           break
-        when conn = @receivers.receive
-          receivers << KeepConn.new(conn.sender, conn.receiver)
+        when receiver = @receivers.receive
+          receivers << receiver.link
         when @ping.receive
           generation.each &.reply(Message[Opcode::Ping])
         when @advance.receive
@@ -224,7 +188,7 @@ module Raktor
       end
     end
 
-    def kill
+    def cut
       @killswitch.send(true)
     end
 
@@ -253,15 +217,15 @@ module Raktor
     end
 
     private def keeper
-      survivors = Set(KeepConn).new
-      generation = Set(KeepConn).new
+      survivors = Set(Link).new
+      generation = Set(Link).new
 
       while true
         select
         when @killswitch.receive
           break
         when survivor = @survivors.receive
-          survivors << KeepConn.new(survivor.sender, survivor.receiver)
+          survivors << survivor.link
         when @purge.receive
           generation.each do |conn|
             next if conn.in?(survivors)
@@ -285,7 +249,7 @@ module Raktor
       end
     end
 
-    def kill
+    def cut
       @killswitch.send(true)
     end
 
@@ -373,9 +337,6 @@ module Raktor
       end
     end
 
-    def kill
-    end
-
     def handle(parcel : Parcel)
       message = parcel.message
 
@@ -457,9 +418,6 @@ module Raktor
       end
     end
 
-    def kill
-    end
-
     private def notify(parcel, term)
       sensors = @map[term, report: Set(Sensor).new]
       sensors.each do |sensor|
@@ -474,7 +432,7 @@ module Raktor
       when .connect?
         parcel.reply(Message[Opcode::InitSelf])
       when .disconnect?
-        puts "[DISCONNECT] Disconnect #{parcel.sender}"
+        puts "[DISCONNECT] Disconnect #{parcel}"
         if appearances = @owned_appearances.delete(parcel.sender)
           appearances.each do |appearance|
             @appearances.delete(appearance)
@@ -487,7 +445,7 @@ module Raktor
             sensors.each { |sensor| @map.delete(sensor) }
           end
         end
-        parcel.disconnect
+        parcel.link.break
       when .register_appearance?
         return unless slot = message.args[0]?
 
@@ -530,43 +488,37 @@ module Raktor
       end
     end
   end
+
+  module Node::Role
+    abstract def handle(parcel : Parcel)
+
+    def cut
+    end
+  end
+
+  class Node::Control
+    getter? disconnect = false
+
+    def disconnect
+      @disconnect = true
+    end
+  end
+
+  # Represents a node's inbox.
+  struct Node::Inbox(T)
+    def initialize(@capacity : Int32 = 2**16)
+      @queue = Channel(T).new(@capacity)
+    end
+
+    # Puts *object* into this inbox (FIFO push). Normally this won't
+    # block, but if the capacity of this inbox is exceeded it will.
+    def send(object : T)
+      @queue.send(object)
+    end
+
+    # Takes and returns the first object from this inbox (FIFO pop).
+    def receive : T
+      @queue.receive
+    end
+  end
 end
-
-include Raktor
-include Terms
-
-# Todo: begin writing specs for Node, use channel for blocking
-# Todo: add/remove own sensors, appearances at runtime
-# Todo: node replicate & disconnect at runtime
-# Todo: double queue backpressure
-# Todo: language parser & interpreter with hot code reloading
-# Todo: optimize insert & delete perf in Sparse::Map
-
-# foo = Node.should do
-#   show default: Num[0]
-#   show default: Num[1]
-#   show default: Num[2]
-# end
-
-# bar = Node.client do
-#   sense %(number)
-#   sense %("crash")
-#   tweak do |n|
-#     if n == Str["crash"]
-#       raise "boom"
-#     end
-#     puts n
-#     n
-#   end
-#   show %(not("crash")), remnant: Str["boo"]
-# end
-
-# baz = Node.should do
-#   sense %("boo")
-#   tweak do |n|
-#     puts "HERE: #{n}"
-#     n
-#   end
-
-#   show %(not("boo")), default: Str["crash"]
-# end

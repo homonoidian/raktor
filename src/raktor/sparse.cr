@@ -19,10 +19,10 @@ require "./sparse/fact_set"
 require "./sparse/conj_tree"
 require "./sparse/map"
 
-# Sparse ("Sensor PARSE") is a declarative language you write sensors
-# with, and a suite of data structures that are exposed to the outside
-# world as a hash table-like interface, `Sparse::Map`. It is meant to
-# be treated as a black box.
+# Sparse ("Sensor PARSE") is a declarative language that is used to
+# define sensors. The language is exposed to the outside world through
+# a hash table-like interface, `Sparse::Map`, which should be treated
+# as a black box.
 #
 # ```
 # map = Sparse::Map(Int32).new

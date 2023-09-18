@@ -251,13 +251,12 @@ module Raktor::Sparse
       end
     end
 
-    # Object which you can use to query the "intermediate map"
-    # in `upsert`.
+    # Helps you query the "intermediate map" constructed by `Map#upsert`.
     struct UpsertQuery(Key)
       def initialize(@compiled : Compiled(Key))
       end
 
-      # Same as `Map#[]`.
+      # Same as `Map#[]`, but runs on the intermediate map.
       def [](term : Term | Enumerable(Term), report : IReport(Key) = [] of Key) : IReport(Key)
         @compiled.query(term, report)
 
@@ -265,6 +264,11 @@ module Raktor::Sparse
       end
     end
 
+    # Updates or inserts the mapping between *key* and *program*. Before
+    # doing so, yields `UpsertQuery` which wraps an "intermediate map"
+    # of sorts. This intermediate map contains exclusively the mapping
+    # between *key* and *program*, so you can use it to query *program*
+    # specifically before it is collated into the main map.
     def upsert(key : Key, program : String, & : UpsertQuery(Key) ->)
       batch do
         delete(key) unless @keys.add?(key)
@@ -282,9 +286,10 @@ module Raktor::Sparse
     # If *report* is given, then the matching keys are reported to it
     # (see `IReport#report`); otherwise, they are added to a new array.
     #
-    # If *term* is `Enumerable`, the returned set contains keys that
+    # If *term* is `Enumerable`, the returned report will contain keys that
     # matched *any* of the terms in the enumerable, i.e., the information
-    # about *which* term the given key matched is lost.
+    # about *which* specific term the given key matched is lost in exchange
+    # for a small boost of performance.
     #
     # ```
     # # map : Sparse::Map(T)

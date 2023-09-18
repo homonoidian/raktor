@@ -1,4 +1,7 @@
-require "../peer"
+require "../src/raktor"
+
+include Raktor
+include Terms
 
 counter = Node.should do
   sense %Q({ target: "Counter", count < 10_000 })

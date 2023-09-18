@@ -1,5 +1,4 @@
-require "http"
-require "../peer"
+require "../src/raktor"
 
 include Raktor
 include Terms
