@@ -55,23 +55,12 @@ reader = Node.should do
 
   tweak do |n|
     puts n
-    n
   end
 end
 
-# I hate the router idea but here it is for now:
-
-router = NamedParcelEndpointRouter.new
-
-router.assign(:is_prime, is_prime.inbox)
-router.assign(:counter_to_is_prime_translator, counter_to_is_prime_translator.inbox)
-router.assign(:counter, counter.inbox)
-router.assign(:reader, reader.inbox)
-
-# Since we're dealing with finite processes order is important!
-router.send(:reader, :is_prime, Message[Opcode::Connect])
-router.send(:is_prime, :is_prime, Message[Opcode::Connect])
-router.send(:counter_to_is_prime_translator, :is_prime, Message[Opcode::Connect])
-router.send(:counter, :is_prime, Message[Opcode::Connect])
+is_prime.join(is_prime)
+counter_to_is_prime_translator.join(is_prime)
+counter.join(is_prime)
+reader.join(is_prime)
 
 sleep

@@ -2,8 +2,6 @@ require "colorize"
 
 module Raktor
   struct Chan(T)
-    include Protocol::IEndpoint(T)
-
     def initialize(@capacity : Int32 = 2**16)
       # @queue = Disruptor::Queue(T).new(@capacity, Disruptor::WaitWithYield.new)
       @queue = Channel(T).new(@capacity)

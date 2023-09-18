@@ -43,7 +43,7 @@ module Raktor
     end
 
     # :nodoc:
-    getter? kernel : (Term, Control -> Term)?
+    getter? kernel : (Term, Control -> Term?)?
 
     def initialize
       @sensors = [] of Sensor
@@ -139,10 +139,10 @@ module Raktor
     #   show "> 100"
     # end
     # ```
-    def tweak(&@kernel : Term, Control -> Term)
+    def tweak(&@kernel : Term, Control -> Term?)
     end
 
-    def tweak(cls : T.class, &kernel : T, Control -> Term) forall T
+    def tweak(cls : T.class, &kernel : T, Control -> Term?) forall T
       tweak { |term, ctrl| kernel.call(term.as(T), ctrl) }
     end
   end

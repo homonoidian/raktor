@@ -1,4 +1,6 @@
+require "http"
 require "uuid"
+require "io/hexdump"
 require "./src/raktor"
 
 class Raktor::Node
@@ -10,7 +12,7 @@ module Raktor
   include Protocol
 
   module Role
-    abstract def handle(parcel : IParcel)
+    abstract def handle(parcel : Parcel)
     abstract def kill
   end
 
@@ -22,11 +24,36 @@ module Raktor
     end
   end
 
+  struct Remote
+    include IParcelEndpoint
+
+    def initialize(@socket : HTTP::WebSocket)
+      @id = UUID.random
+    end
+
+    def receive(parcel : Parcel)
+      @socket.stream do |io|
+        parcel.message.to_cannon_io(io)
+      end
+    rescue IO::Error
+    end
+
+    def disconnect
+      @socket.close
+    end
+
+    def to_s(io)
+      io << "<Remote id=" << @id << ">"
+    end
+
+    def_equals_and_hash @id
+  end
+
   class Node
-    getter inbox : Chan(IParcel)
+    include IParcelEndpoint
 
     def initialize(@roles : Array(Role))
-      @inbox = Chan(IParcel).new
+      @inbox = Chan(Parcel).new
     end
 
     # A crude DSL for describing nodes in Crystal. For the
@@ -52,6 +79,62 @@ module Raktor
       node
     end
 
+    def join(host : IParcelEndpoint)
+      send(host, Message[Opcode::Connect])
+    end
+
+    def join(uri : URI)
+      # convert uri to (remote impls iparcelendpoint)
+      # initiatlize with join(iparcelendpoint)
+      spawn do
+        socket = HTTP::WebSocket.new(uri)
+        remote = Remote.new(socket)
+        socket.on_binary do |bin|
+          io = IO::Memory.new(bin)
+          message = Message.from_cannon_io(io)
+          # puts message
+          # hex = IO::Hexdump.new(io, output: STDERR, read: true)
+          # hex.gets_to_end
+          # io.rewind
+          remote.send(self, message)
+        end
+        join(remote)
+        socket.run
+      end
+    end
+
+    def bind(uri : URI)
+      spawn do
+        sockets = HTTP::WebSocketHandler.new do |socket, ctx|
+          remote = Remote.new(socket)
+
+          socket.on_binary do |bin|
+            io = IO::Memory.new(bin)
+            message = Message.from_cannon_io(io)
+            # puts message
+            # hex = IO::Hexdump.new(io, output: STDERR, read: true)
+            # hex.gets_to_end
+            # io.rewind
+            remote.send(self, message)
+          end
+
+          socket.on_close do
+            remote.send(self, Message[Opcode::Disconnect])
+          end
+        end
+
+        server = HTTP::Server.new([sockets])
+        server.bind(uri)
+        server.listen
+      end
+    end
+
+    # Todo: give control of the server to the outside world
+
+    def receive(parcel : Parcel)
+      @inbox.send(parcel)
+    end
+
     def spawn
       spawn do
         while parcel = @inbox.receive
@@ -66,13 +149,13 @@ module Raktor
     def_equals_and_hash object_id
   end
 
-  record KeepConn, router : IRouter(IEndpoint(IParcel)), sender : UInt64, receiver : UInt64 do
-    def send(message : Message)
-      router.send(sender, receiver, message)
+  record KeepConn, sender : IParcelEndpoint, receiver : IParcelEndpoint do
+    def reuse(message : Message)
+      sender.receive Parcel.new(sender, receiver, message)
     end
 
     def reply(message : Message)
-      router.send(receiver, sender, message)
+      sender.receive Parcel.new(receiver, sender, message)
     end
 
     def_equals_and_hash sender, receiver
@@ -86,7 +169,7 @@ module Raktor
 
     def initialize
       @killswitch = Channel(Bool).new
-      @receivers = Channel(IParcel).new(32)
+      @receivers = Channel(Parcel).new(32)
       @ping = Channel(Bool).new
       @advance = Channel(Bool).new
 
@@ -104,10 +187,14 @@ module Raktor
         when @killswitch.receive
           break
         when conn = @receivers.receive
-          receivers << KeepConn.new(conn.router, conn.sender, conn.receiver)
+          receivers << KeepConn.new(conn.sender, conn.receiver)
         when @ping.receive
           generation.each &.reply(Message[Opcode::Ping])
         when @advance.receive
+          generation.each do |conn|
+            next if conn.in?(receivers)
+            conn.reuse(Message[Opcode::Disconnect])
+          end
           generation.clear
           generation.concat(receivers)
           receivers.clear
@@ -158,7 +245,7 @@ module Raktor
 
     def initialize
       @killswitch = Channel(::Bool).new
-      @survivors = Channel(IParcel).new(32)
+      @survivors = Channel(Parcel).new(32)
       @purge = Channel(Bool).new
 
       spawn(keeper, same_thread: true)
@@ -174,11 +261,11 @@ module Raktor
         when @killswitch.receive
           break
         when survivor = @survivors.receive
-          survivors << KeepConn.new(survivor.router, survivor.sender, survivor.receiver)
+          survivors << KeepConn.new(survivor.sender, survivor.receiver)
         when @purge.receive
           generation.each do |conn|
             next if conn.in?(survivors)
-            conn.send(Message[Opcode::Disconnect])
+            conn.reuse(Message[Opcode::Disconnect])
           end
           generation.clear
           generation.concat(survivors)
@@ -228,7 +315,7 @@ module Raktor
       @appearance_rdict = {} of Recipe::Appearance => String
       @appearance_slots = {} of Int32 => Recipe::Appearance
 
-      @kernel = recipe.kernel? || ->(term : Term, ctrl : Control) { term }
+      @kernel = recipe.kernel? || ->(term : Term, ctrl : Control) { term.as(Term?) }
 
       recipe.each_sensor do |sensor|
         @sensor_slots[sensor.slot] = sensor
@@ -256,7 +343,7 @@ module Raktor
       return unless state = sensor.mapper.call(term)
 
       control = Control.new
-      result = @kernel.call(state, control)
+      result = @kernel.call(state, control) || state
 
       if control.disconnect?
         parcel.reply(Message[Opcode::Disconnect])
@@ -289,7 +376,7 @@ module Raktor
     def kill
     end
 
-    def handle(parcel : IParcel)
+    def handle(parcel : Parcel)
       message = parcel.message
 
       case message.opcode
@@ -343,16 +430,16 @@ module Raktor
     include Role
     include Terms
 
-    record Sensor, owner : UInt64, id = UUID.random.to_s
-    record Appearance, owner : UInt64, remnant : Term? = nil, id = UUID.random.to_s do
+    record Sensor, owner : IParcelEndpoint, id = UUID.random.to_s
+    record Appearance, owner : IParcelEndpoint, remnant : Term? = nil, id = UUID.random.to_s do
       def_equals_and_hash owner, id
     end
 
     def initialize
       @map = Sparse::Map(Sensor).new
       @appearances = {} of Appearance => Term?
-      @owned_sensors = {} of UInt64 => Set(Sensor)
-      @owned_appearances = {} of UInt64 => Set(Appearance)
+      @owned_sensors = {} of IParcelEndpoint => Set(Sensor)
+      @owned_appearances = {} of IParcelEndpoint => Set(Appearance)
     end
 
     class BoolReport(T)
@@ -380,7 +467,7 @@ module Raktor
       end
     end
 
-    def handle(parcel : IParcel)
+    def handle(parcel : Parcel)
       message = parcel.message
 
       case message.opcode
@@ -448,7 +535,6 @@ end
 include Raktor
 include Terms
 
-# Todo: websocket router
 # Todo: begin writing specs for Node, use channel for blocking
 # Todo: add/remove own sensors, appearances at runtime
 # Todo: node replicate & disconnect at runtime

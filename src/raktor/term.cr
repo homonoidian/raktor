@@ -89,8 +89,16 @@ module Raktor
       Num.new(value + other.value)
     end
 
+    def succ
+      self + Num[1]
+    end
+
     def -(other : Num)
       Num.new(value - other.value)
+    end
+
+    def pred
+      self - Num[1]
     end
 
     def *(other : Num)
