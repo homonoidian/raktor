@@ -432,7 +432,7 @@ module Raktor
       when .connect?
         parcel.reply(Message[Opcode::InitSelf])
       when .disconnect?
-        puts "[DISCONNECT] Disconnect #{parcel}"
+        # puts "[DISCONNECT] Disconnect #{parcel}"
         if appearances = @owned_appearances.delete(parcel.sender)
           appearances.each do |appearance|
             @appearances.delete(appearance)

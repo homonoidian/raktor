@@ -27,3 +27,28 @@ end
 def mq(map : Sparse::Map(T) | Sparse::Map::UpsertQuery(T), term : Term) forall T
   mq(map, term, Set(Int32).new)
 end
+
+def probe(host, nsamples : Int32, filter : String, default : Term? = nil, remnant : Term? = nil)
+  samples = Channel(Term).new
+
+  probe = Node.should do
+    sense filter
+
+    sent = 0
+
+    tweak do |it, ctrl|
+      samples.send(it)
+      sent += 1
+      if sent == nsamples
+        ctrl.disconnect
+      end
+      it
+    end
+
+    show "not(any)", default: default, remnant: remnant
+  end
+
+  probe.join(host)
+
+  (0...nsamples).map { samples.receive }
+end
