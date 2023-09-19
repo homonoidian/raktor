@@ -1,6 +1,7 @@
 require "uuid"
 require "http"
 require "cannon"
+require "immutable"
 
 require "./ext/*"
 require "./raktor/term"

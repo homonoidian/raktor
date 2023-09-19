@@ -122,8 +122,8 @@ module Raktor::Sparse
       while true
         changed = false
         rewriters.each do |rewriter|
-          rewriter.rewrite(self, subst)
-          if subst.pop(self)
+          book_changed = rewriter.rewrite(self, subst)
+          if subst.pop(self) || book_changed
             changed = true
           end
         end

@@ -9,6 +9,8 @@ dependencies:
     github: nolantait/disruptor.cr
   cannon:
     github: Papierkorb/cannon
+  immutable:
+    github: lucaong/immutable
 
 targets:
   raktor:

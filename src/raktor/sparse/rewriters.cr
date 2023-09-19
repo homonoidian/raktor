@@ -2,8 +2,9 @@ module Raktor::Sparse
   # Includers can rewrite a `RuleBook`.
   module BookRewriter
     # Mutably rewrites the given *book*, may publish label substitutions
-    # to the given substitution table *subst*.
-    abstract def rewrite(book, subst)
+    # to the given substitution table *subst*. Returns whether *book* was
+    # somehow modified.
+    abstract def rewrite(book, subst) : Bool
   end
 
   # Substitutes identical rules with a single rule. Labels of identical
@@ -27,7 +28,9 @@ module Raktor::Sparse
 
     @_groups = {} of Rule => Array(Label)
 
-    def rewrite(book, subst)
+    def rewrite(book, subst) : Bool
+      changed = false
+
       book.each_rule_with_label do |rule, label|
         instances = @_groups[rule] ||= [] of Label
         instances << label
@@ -36,6 +39,8 @@ module Raktor::Sparse
       @_groups.each do |rule, labels|
         next if labels.size < 2
 
+        changed = true
+
         book.defrule do |common|
           # Remove rules in identicals (including head itself) from
           # the rule book.
@@ -43,6 +48,8 @@ module Raktor::Sparse
           rule
         end
       end
+
+      changed
     ensure
       @_groups.clear
     end
@@ -67,12 +74,14 @@ module Raktor::Sparse
   struct BookRewriter::BindingRewriter
     include BookRewriter
 
-    def rewrite(book, subst)
+    def rewrite(book, subst) : Bool
       book.each_rule_with_label do |rule, label|
         next unless target = rule.binding?
 
         label.replace_with(target, in: subst)
       end
+
+      false
     end
   end
 
@@ -93,17 +102,18 @@ module Raktor::Sparse
   struct BookRewriter::AndOrEmbedder
     include BookRewriter
 
-    def rewrite(book, subst)
+    def rewrite(book, subst) : Bool
+      changed = false
       book.each_rule_with_label(Rule::Comb::And, Rule::Comb::Or) do |outer, label|
         outer.each_arg_embed do |arg|
           next arg unless inner = book.rule_for?(arg)
           next arg unless inner.comb == outer.comb
-
           # We can only embed and into and, or into or etc.
-
+          changed = true
           inner
         end
       end
+      changed
     end
   end
 
@@ -124,7 +134,7 @@ module Raktor::Sparse
   struct BookRewriter::NotEmbedder
     include BookRewriter
 
-    def rewrite(book, subst)
+    def rewrite(book, subst) : Bool
       book.each_rule_with_label(Rule::Comb::Not) do |outer, label|
         next unless arg = outer.first_arg?
         next unless inner = book.rule_for?(arg)
@@ -135,6 +145,8 @@ module Raktor::Sparse
         # replace the outer not with whatever `_` is.
         label.replace_with(inner_arg, in: subst)
       end
+
+      false
     end
   end
 
@@ -154,14 +166,16 @@ module Raktor::Sparse
   struct BookRewriter::OrToAndRewriter
     include BookRewriter
 
-    def rewrite(book, subst)
+    def rewrite(book, subst) : Bool
+      changed = false
       book.each_rule_with_label(Rule::Comb::Or) do |rule, label|
+        changed = true
         nor = book.combine(rule, Rule::Comb::And) do |arg|
           book.defrule { Rule.new(Rule::Comb::Not, Set{arg}) }
         end
-
         book.update_rule_for(label, Rule.new(Rule::Comb::Not, Set{nor}))
       end
+      changed
     end
   end
 
@@ -173,7 +187,7 @@ module Raktor::Sparse
     @_seen = Set(Label).new
     @_delete = [] of Label
 
-    def rewrite(book, subst)
+    def rewrite(book, subst) : Bool
       # Tagged labels must always be kept because the outside
       # world is interested in them.
       book.each_tagset_with_label { |_, label| @_seen << label }
@@ -196,6 +210,8 @@ module Raktor::Sparse
       @_delete.each do |label|
         book.delete_rule_for(label)
       end
+
+      !@_delete.empty?
     ensure
       @_seen.clear
       @_delete.clear

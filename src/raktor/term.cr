@@ -19,7 +19,7 @@ module Raktor
           kt = @children[k].to_term
           vt = @children[k + 1].to_term
           if kt.is_a?(Terms::Str) || kt.is_a?(Terms::Num)
-            dict = dict.putattr(kt, vt)
+            dict = dict.withattr(kt, vt)
           end
         end
         dict
@@ -139,6 +139,10 @@ module Raktor
       TermIR.new(typeid, @value)
     end
 
+    def cut(index : Int32)
+      {Str[@value[...index]? || ""], Str[@value[index..]? || ""]}
+    end
+
     def to_s(io)
       value.dump(io)
     end
@@ -170,7 +174,7 @@ module Raktor
   class Terms::Dict < Term
     getter value
 
-    def initialize(@value = {} of Term => Term)
+    def initialize(@value = Immutable::Map(Term, Term).new)
     end
 
     def typeid
@@ -185,20 +189,28 @@ module Raktor
       TermIR.new(typeid, children: children)
     end
 
-    def self.[](hash : Hash(Term, Term) = {} of Term => Term)
-      new(hash.as(Hash(Term, Term)))
-    end
-
     def self.[](*items : Term)
-      new(items.map_with_index { |item, index| {Num.new(index).as(Term), item.as(Term)} }.to_h)
+      map = Immutable::Map(Term, Term).new.transient do |transient|
+        items.each_with_index do |item, index|
+          transient.set(Num[index], item)
+        end
+      end
+
+      new(map)
     end
 
     def self.[](**kvs : Term)
-      dict = new
-      kvs.each do |k, v|
-        dict = dict.putattr(Str.new(k.to_s), v)
+      map = Immutable::Map(Term, Term).new.transient do |transient|
+        kvs.each do |k, v|
+          transient.set(Str[k], v)
+        end
       end
-      dict
+
+      new(map)
+    end
+
+    def self.[]
+      new
     end
 
     def getattr?(k : Term)
@@ -209,9 +221,12 @@ module Raktor
       @value[k]
     end
 
-    def putattr(k : Term, v : Term)
-      @value[k] = v
-      self
+    def withattr(k : Term, v : Term)
+      Dict.new(@value.set(k, v))
+    end
+
+    def +(other : Term)
+      Dict.new(@value.set(Num[@value.size], other))
     end
 
     macro method_missing(call)
@@ -219,7 +234,20 @@ module Raktor
     end
 
     def to_s(io)
-      io << "{" << @value.join(", ") { |k, v| "#{k}: #{v}" } << "}"
+      list = true
+      @value.each_key do |key|
+        unless key.is_a?(Num)
+          list = false
+          next
+        end
+      end
+
+      if list
+        values = @value.to_a.sort_by! { |k, v| k.as(Num).value }
+        io << "[" << values.join(", ") { |_, v| v } << "]"
+      else
+        io << "{" << @value.join(", ") { |k, v| "#{k}: #{v}" } << "}"
+      end
     end
 
     def_equals_and_hash @value

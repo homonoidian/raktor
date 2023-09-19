@@ -15,7 +15,7 @@ module Raktor::Sparse
   # and then was contradicted by X, those facts that Y added are *not* going
   # to be removed.
   struct FactSet(Tag)
-    def initialize(@book : RuleBook(Tag), @inverted : Hash(Label, Label), @facts : PosIntSet) forall Tag
+    def initialize(@book : RuleBook(Tag), @inverted : Hash(Label, Array(Label)), @facts : PosIntSet) forall Tag
     end
 
     # Same as in `PosIntSet`.
@@ -29,8 +29,8 @@ module Raktor::Sparse
     # Adds *fact* to this fact set. Removes all contradicting facts.
     def append(fact : Label)
       fact.transfer(to: @facts)
-      if inverse = @inverted[fact]?
-        inverse.delete(from: @facts)
+      if inverses = @inverted[fact]?
+        inverses.each &.delete(from: @facts)
       end
     end
 

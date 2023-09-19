@@ -1089,6 +1089,19 @@ describe Raktor::Sparse do
       mq(map, Terms::Num.new(100), 0, 2)
       mq(map, Terms::Str.new("hello world"), 1)
     end
+
+    it "supports not with string" do
+      q(%Q(string not("" or "[" or "]")), Terms::Str["hello"], 0)
+      q(%Q(string not("" or "[" or "]")), Terms::Str[""])
+      q(%Q(string not("" or "[" or "]")), Terms::Str["["])
+      q(%Q(string not("" or "[" or "]")), Terms::Str["]"])
+      q(%Q(string not("" or "[" or "]")), Terms::Str["123["], 0)
+      q(%Q(string not("" or "[" or "]")), Terms::Str["]456"], 0)
+      q(%Q({ x: string not("" or "[" or "]") }), Terms::Dict[x: Term::Str["hello"], y: Terms::Boolean[true]], 0)
+      q(%Q({ x: string not("" or "[" or "]") }), Terms::Dict[x: Term::Str[""], y: Terms::Boolean[true]])
+      q(%Q({ x: string not("" or "[" or "]") }), Terms::Dict[x: Term::Str["["], y: Terms::Boolean[true]])
+      q(%Q({ x: string not("" or "[" or "]") }), Terms::Dict[x: Term::Str["]"], y: Terms::Boolean[true]])
+    end
   end
 
   describe "#delete" do

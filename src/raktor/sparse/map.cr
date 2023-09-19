@@ -22,15 +22,18 @@ module Raktor::Sparse
       def initialize(@vm : Machine::VM, @ir : Machine::IR, @conj : ConjTree, @book : RuleBook(Key))
         @initial = PosIntSet.new
         @working = PosIntSet.new
-        @inverted = Hash(Label, Label).new
+        @inverted = Hash(Label, Array(Label)).new
 
+        # FIXME: this relies on NotEmbedder working properly, i.e., nested
+        # not()s are not supported here but should be!
         book.each_rule_with_label(Rule::Comb::Not) do |rule, inverse|
           next unless invertee = rule.first_arg?
 
           # In %inverse = not(%invertee), %inverse is a match by default.
           # However, if we ever encounter %invertee, we turn %inverse off
           # (remove it from the fact set).
-          @inverted[invertee] = inverse
+          inverses = @inverted[invertee] ||= [] of Label
+          inverses << inverse
 
           inverse.transfer(to: @initial)
         end
@@ -98,9 +101,9 @@ module Raktor::Sparse
         BookRewriter::SameBodyRewriter.new,
         BookRewriter::BindingRewriter.new,
         BookRewriter::AndOrEmbedder.new,
-        BookRewriter::NotEmbedder.new,
         BookRewriter::UnusedRuleRemover.new,
         BookRewriter::OrToAndRewriter.new,
+        BookRewriter::NotEmbedder.new,
       )
     ensure
       @_compile_chain.clear
