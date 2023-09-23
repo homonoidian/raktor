@@ -8,3 +8,7 @@ shards:
     git: https://github.com/nolantait/disruptor.cr.git
     version: 0.1.0
 
+  immutable:
+    git: https://github.com/lucaong/immutable.git
+    version: 0.1.24
+

@@ -1,30 +1,158 @@
 module Raktor::Protocol
   enum Opcode : UInt8
+    # Initiate connection with a host node. *Sent by a client node to
+    # the host node* it wants to connect to. No arguments are required.
+    #
+    # If everything is alright, the host node will respond with `InitSelf`.
+    #
+    # The client node must periodically `Ping`, otherwise, the host node
+    # will drop the connection. The host node replies to `Ping` messages
+    # with `Pong` messages. It is up to the client to decide how to
+    # handle them.
     Connect
-    Disconnect
 
-    RegisterSensor
-    RegisterAppearance
-
-    UnregisterSensor
-    UnregisterAppearance
-
-    InitSelf
-    InitSensor
-    InitAppearance
-
+    # *Sent by a client node to a host node*. Used to confirm connection.
+    # If there are no pings for a certain period, the host node will
+    # force-disconnect the client node. No arguments are required.
     Ping
+
+    # *Sent by a host node to a client node* in response to `Ping`
+    # and `Connect`. No arguments are required.
     Pong
 
-    SetAppearance
+    # *Sent by a host node to a client node* in response to `Connect`.
+    # Client nodes may handle this message however they desire. More
+    # generally, a client node that receives `InitSelf` is considered to
+    # be *acknowledged* by the host and is expected to register its
+    # sensors and appearances. `InitSelf` messages have no arguments.
+    InitSelf
+
+    # *Sent by a client node to a host node*, usually in response to `InitSelf`.
+    # Registers a filter, which is the main part of a node's sensor.
+    #
+    # ```text
+    # RegisterFilter(args: [u64 slot], terms: [string filter])
+    # ```
+    #
+    # *slot* is a client-side reference to the filter. It is used to
+    # identify the filter independently from the host(s) the client
+    # is connected to. Most notably, *slot* is forwarded in by the host
+    # in `InitFilter`, allowing the client to associate its *slot* with
+    # a host-specific id.
+    #
+    # *filter* is the Sparse source code for the filter.
+    #
+    # If the filter was registered successfully, the host node responds
+    # with `InitFilter`. If there was an error, the host node responds
+    # with `RefuseFilter`.
+    RegisterFilter
+
+    # *Sent by a client node to a host node*, usually in response to `InitSelf`.
+    # Registers an appearance.
+    #
+    # ```text
+    # RegisterAppearance(args: [u64 slot], terms: [term? remnant])
+    # ```
+    #
+    # *slot* is a client-side reference to the appearance, similar to
+    # that in `RegisterFilter`.
+    #
+    # *remnant* is an optional argument specifying the term that is
+    # shown to nodes after the client disconnects.
+    #
+    # If the appearance was registered successfully, the host node responds
+    # with `InitAppearance`. If there was an error, the host node responds
+    # with `RefuseAppearance`.
+    RegisterAppearance
+
+    # *Sent by a host node to a client node* in response to `RegisterFilter`.
+    # If received, it indicates a successful registration of the filter.
+    #
+    # ```text
+    # InitFilter(args: [u64 slot], terms: [string id, term... terms])
+    # ```
+    #
+    # *slot* is the filter slot that was provided by the client node in
+    # `RegisterFilter`. See `RegisterFilter` for details.
+    #
+    # *id* is the freshly minted host-side id of the filter. The client
+    # node can use it to refer to the filter when talking with the host
+    # node. The host node will use *id* to refer to the filter when
+    # talking with the client node.
+    #
+    # *terms* is the initial set of terms that the filter should react to.
+    # When a filter is inserted into the host world it examines all appearances
+    # in that world; those matched by the filter are included in `InitFilter`
+    # as *terms*.
+    InitFilter
+
+    # *Sent by a host node to a client node* in response to `RegisterAppearance`.
+    # If received, it indicates a successful registration of the appearance.
+    #
+    # ```text
+    # InitAppearance(args: [u64 slot], terms: [string id])
+    # ```
+    #
+    # *slot* is the appearance slot that was provided by the client node
+    # in `RegisterAppearance`. See `RegisterAppearance` for details.
+    #
+    # *id* is the freshly minted host-side id of the appearance. The
+    # client node can use it to refer to the appearance when talking
+    # with the host node. The host node will use *id* to refer to the
+    # appearance when talking with the client node.
+    InitAppearance
+
+    # *Sent by a host node to a client node* in response to appearance
+    # change that matches one of the client node's registered filters.
+    #
+    # ```text
+    # Sense(args: [], terms: [any term, string id])
+    # ```
+    #
+    # *term* is the term that the filter matched.
+    #
+    # *id* is the host-side id of the sensor which the client should
+    # have received in `InitSensor`.
     Sense
+
+    # *Sent by a client node to a host node* to trigger an appearance
+    # change for one of the client node's appearances.
+    #
+    # ```
+    # SetAppearance(args: [], terms: [any term, string id])
+    # ```
+    #
+    # *term* is the term that should be used as the new appearance.
+    #
+    # *id* is the host-side id of the appearance which the client should
+    # have received in `InitAppearance`.
+    SetAppearance
+
+    # Close connection with a host node. Sent by a client node wishing
+    # to disconnect. The host node can also forge a Disconnect message
+    # and send it to itself if the client times out for some reason.
+    # No arguments are required.
+    Disconnect
+
+    # TODO
+    UnregisterSensor
+    # TODO
+    UnregisterAppearance
+
+    def to_json(json)
+      value.to_json(json)
+    end
 
     def to_cannon_io(io)
       value.to_cannon_io(io)
     end
 
+    def self.new(pull : JSON::PullParser)
+      new UInt8.new(pull)
+    end
+
     def self.from_cannon_io(io)
-      Opcode.new(UInt8.from_cannon_io(io))
+      new UInt8.from_cannon_io(io)
     end
   end
 

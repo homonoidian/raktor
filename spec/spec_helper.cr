@@ -63,6 +63,8 @@ def probe(host, duration : Time::Span, filter : String, default : Term? = nil, r
       samples.send(it)
       it
     end
+
+    show "not(any)", default: default, remnant: remnant
   end
 
   probe.join(host)

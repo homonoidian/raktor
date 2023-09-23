@@ -14,11 +14,13 @@ module Raktor
 
     def receive(parcel : Parcel)
       if @socket.closed?
+        # TODO: queue if socket is revived before timeout. This will
+        # require batching though, o/w would be quite expensive?
         Log.debug { "#{@id}: socket is closed, won't send" }
         return
       end
 
-      Log.debug { "#{@id}: receive(#{parcel}), forward via socket" }
+      Log.debug { "#{@id}: forward via socket: #{parcel}" }
 
       @format.send(@socket, parcel.message)
     end
@@ -216,6 +218,8 @@ module Raktor
         when @killswitch.receive
           break
         when survivor = @survivors.receive
+          message = survivor.message
+          next unless message.opcode.connect? || survivor.link.in?(generation)
           survivors << survivor.link
         when @purge.receive
           generation.each do |conn|
@@ -248,9 +252,7 @@ module Raktor
       message = parcel.message
 
       case message.opcode
-      when .connect?
-        @survivors.send(parcel)
-      when .ping?
+      when .connect?, .ping?
         @survivors.send(parcel)
         parcel.reply(Message[Opcode::Pong])
       end
@@ -355,14 +357,14 @@ module Raktor
       case message.opcode
       when .init_self?
         @sensor_slots.each do |slot, sensor|
-          parcel.reply(Message[Opcode::RegisterSensor, slot.to_u64, Str[sensor.filter]])
+          parcel.reply(Message[Opcode::RegisterFilter, slot.to_u64, Str[sensor.filter]])
         end
         @appearance_slots.each do |slot, appearance|
           remnant = appearance.recipe.remnant
           terms = remnant ? [remnant] : [] of Term
           parcel.reply(Message.new(Opcode::RegisterAppearance, args: [slot.to_u64], terms: terms))
         end
-      when .init_sensor?
+      when .init_filter?
         return unless id = message.terms[0]?.as?(Str)
         return if @sensor_dict.has_key?(id.value)
         return unless slot = message.args[0]?
@@ -475,7 +477,7 @@ module Raktor
         ownerof << appearance
 
         parcel.reply(Message[Opcode::InitAppearance, slot, Str[appearance.id]])
-      when .register_sensor?
+      when .register_filter?
         return unless slot = message.args[0]?
         return unless filter = message.terms[0]?.as?(Str)
         terms = [] of Term
@@ -489,7 +491,7 @@ module Raktor
         ownerof = @owned_sensors[parcel.sender] ||= Set(Sensor).new
         ownerof << sensor
         parcel.reply(
-          Message.new(Opcode::InitSensor,
+          Message.new(Opcode::InitFilter,
             args: [slot],
             terms: terms.unshift(Str[sensor.id])
           )

@@ -67,8 +67,8 @@ module Raktor
       to_ir.to_cannon_io(io)
     end
 
-    def to_json(io)
-      to_ir.to_json(io)
+    def to_json(json)
+      to_ir.to_json(json)
     end
 
     def self.new(pull)
@@ -232,6 +232,10 @@ module Raktor
 
     def withattr(k : Term, v : Term)
       Dict.new(@value.set(k, v))
+    end
+
+    def without(k : Term) : {Dict, Term}
+      {Dict.new(@value.delete(k)), @value[k]}
     end
 
     def +(other : Term)

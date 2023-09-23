@@ -18,7 +18,7 @@ include Protocol
 describe Raktor::Protocol do
   describe "serialization/deserialization of server" do
     it "should serialize register sensor" do
-      check(Message[Opcode::RegisterSensor, 123u64, Str["hello world"]])
+      check(Message[Opcode::RegisterFilter, 123u64, Str["hello world"]])
     end
 
     it "should serialize register appearance" do
@@ -35,7 +35,7 @@ describe Raktor::Protocol do
 
   describe "serialization/deserialization of client" do
     it "should serialize initsensor" do
-      check(Message[Opcode::InitSensor, 123u64])
+      check(Message[Opcode::InitFilter, 123u64])
     end
 
     it "should serialize initappearance" do
