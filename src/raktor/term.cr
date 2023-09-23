@@ -1,6 +1,7 @@
 module Raktor
   struct TermIR
     include Cannon::Auto
+    include JSON::Serializable
 
     def initialize(@typeid : UInt8, @arg : String | Float64? = nil, @children = [] of TermIR)
     end
@@ -64,6 +65,14 @@ module Raktor
 
     def to_cannon_io(io)
       to_ir.to_cannon_io(io)
+    end
+
+    def to_json(io)
+      to_ir.to_json(io)
+    end
+
+    def self.new(pull)
+      TermIR.new(pull).to_term
     end
 
     def self.from_cannon_io(io)

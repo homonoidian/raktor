@@ -9,19 +9,15 @@ module Raktor::Protocol
     UnregisterSensor
     UnregisterAppearance
 
-    SetAppearance
-
-    RequestUniqueIdRange
-    AcceptUniqueIdRange
-
     InitSelf
     InitSensor
     InitAppearance
 
-    Sense
-
     Ping
     Pong
+
+    SetAppearance
+    Sense
 
     def to_cannon_io(io)
       value.to_cannon_io(io)
@@ -33,6 +29,9 @@ module Raktor::Protocol
   end
 
   # Includers can be senders and receivers of `Parcel`s.
+  #
+  # Includers *MUST* be hashable, their hashes&equality *MUST NOT*
+  # mutate. Endpoints are used extensively as keys in hashes/sets.
   module IParcelEndpoint
     # Processes and optionally replies to the given *parcel*.
     abstract def receive(parcel : Parcel)
@@ -116,6 +115,7 @@ module Raktor::Protocol
   # and between fibers. Messages are serializable using `Cannon`.
   record Message, opcode : Opcode, args = [] of UInt64, terms = [] of Term do
     include Cannon::Auto
+    include JSON::Serializable
 
     # A faster way to create `Message`s.
     #

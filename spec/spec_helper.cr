@@ -52,3 +52,31 @@ def probe(host, nsamples : Int32, filter : String, default : Term? = nil, remnan
 
   (0...nsamples).map { samples.receive }
 end
+
+def probe(host, duration : Time::Span, filter : String, default : Term? = nil, remnant : Term? = nil)
+  samples = Channel(Term).new
+
+  probe = Node.should do
+    sense filter
+
+    tweak do |it|
+      samples.send(it)
+      it
+    end
+  end
+
+  probe.join(host)
+
+  terms = Set(Term).new
+  while true
+    select
+    when sample = samples.receive
+      terms << sample
+    when timeout(duration)
+      probe.send(host, Message[Opcode::Disconnect])
+      break
+    end
+  end
+
+  terms
+end

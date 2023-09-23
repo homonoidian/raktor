@@ -4,19 +4,29 @@ module Raktor
   struct Remote
     include IParcelEndpoint
 
-    def initialize(@socket : HTTP::WebSocket)
+    Log = ::Log.for("remote")
+
+    def initialize(@socket : HTTP::WebSocket, @format = Format::Binary)
       @id = UUID.random
+
+      Log.debug { "#{@id}: successfully initialized, will serialize using: #{@format}" }
     end
 
     def receive(parcel : Parcel)
-      @socket.stream do |io|
-        parcel.message.to_cannon_io(io)
+      if @socket.closed?
+        Log.debug { "#{@id}: socket is closed, won't send" }
+        return
       end
-    rescue IO::Error
+
+      Log.debug { "#{@id}: receive(#{parcel}), forward via socket" }
+
+      @format.send(@socket, parcel.message)
     end
 
     def disconnect(endpoint : IParcelEndpoint)
-      @socket.close # ???
+      Log.debug { "#{@id}: close socket due to explicit disconnect" }
+
+      @socket.close
     end
 
     def to_s(io)
@@ -56,48 +66,30 @@ module Raktor
       node
     end
 
+    def receive(parcel : Parcel)
+      @inbox.send(parcel)
+    end
+
     def join(host : IParcelEndpoint)
       send(host, Message[Opcode::Connect])
     end
 
-    def join(uri : URI)
+    def join(uri : URI, format = Format::Binary)
       spawn do
         socket = HTTP::WebSocket.new(uri)
-        remote = Remote.new(socket)
-        socket.on_binary do |bin|
-          io = IO::Memory.new(bin)
-          message = Message.from_cannon_io(io)
-          # puts message
-          # hex = IO::Hexdump.new(io, output: STDERR, read: true)
-          # hex.gets_to_end
-          # io.rewind
-          remote.send(self, message)
-        end
+        remote = Remote.new(socket, format)
+        format.receive(socket) { |message| remote.send(self, message) }
         join(remote)
         socket.run
       end
     end
 
-    def bind(uri : URI)
+    def bind(uri : URI, format = Format::Binary)
       spawn do
         sockets = HTTP::WebSocketHandler.new do |socket, ctx|
-          remote = Remote.new(socket)
-
-          socket.on_binary do |bin|
-            io = IO::Memory.new(bin)
-            message = Message.from_cannon_io(io)
-            # puts message
-            # hex = IO::Hexdump.new(io, output: STDERR, read: true)
-            # hex.gets_to_end
-            # io.rewind
-            remote.send(self, message)
-          end
-
-          socket.on_close do
-            remote.send(self, Message[Opcode::Disconnect])
-          end
+          remote = Remote.new(socket, format)
+          format.receive(socket) { |message| remote.send(self, message) }
         end
-
         server = HTTP::Server.new([sockets])
         server.bind(uri)
         server.listen
@@ -106,19 +98,18 @@ module Raktor
 
     # Todo: give control of the server to the outside world
     # Todo: how to bridge between worlds securely?
+    # Todo: reuse one server for many worlds?
 
-    def receive(parcel : Parcel)
-      @inbox.send(parcel)
-    end
-
+    # Spawns
     def spawn
       spawn do
         while parcel = @inbox.receive
-          @roles.each &.handle(parcel)
+          begin
+            @roles.each &.handle(parcel)
+          rescue e : Exception
+            Log.error(exception: e) { "Error while handling parcel" }
+          end
         end
-      rescue e : Exception
-        @roles.each &.cut
-        raise e
       end
     end
 
@@ -270,14 +261,30 @@ module Raktor
     include Role
     include Terms
 
+    class Appearance # Crap crap crap
+      getter recipe
+      getter value : Term?
+
+      def initialize(@recipe : Recipe::Appearance)
+        @value = recipe.default
+      end
+
+      def set(@value)
+      end
+
+      forward_missing_to @recipe # crap
+
+      def_equals_and_hash @recipe
+    end
+
     def initialize(recipe : Recipe)
       @sensor_dict = {} of String => Recipe::Sensor
       @sensor_slots = {} of Int32 => Recipe::Sensor
 
-      @appearance_map = Sparse::Map(Recipe::Appearance).new
-      @appearance_dict = {} of String => Recipe::Appearance
-      @appearance_rdict = {} of Recipe::Appearance => String
-      @appearance_slots = {} of Int32 => Recipe::Appearance
+      @appearance_map = Sparse::Map(Appearance).new
+      @appearances = {} of IParcelEndpoint => Hash(String, Appearance)
+      @appearances_r = {} of IParcelEndpoint => Hash(Appearance, String)
+      @appearance_slots = {} of Int32 => Appearance
 
       @kernel = recipe.kernel? || ->(term : Term, ctrl : Control) { term.as(Term?) }
 
@@ -287,20 +294,25 @@ module Raktor
 
       @appearance_map.batch do
         recipe.each_appearance do |appearance|
-          @appearance_map[appearance] = appearance.filter
-          @appearance_slots[appearance.slot] = appearance
+          obj = Appearance.new(appearance)
+          @appearance_map[obj] = appearance.filter
+          @appearance_slots[appearance.slot] = obj
         end
       end
     end
 
-    private def activate(parcel, appearances : Array(Recipe::Appearance), result)
+    private def activate(parcel, appearances : Array(Appearance), result)
       appearances.each { |appearance| activate(parcel, appearance, result) }
     end
 
-    private def activate(parcel, appearance : Recipe::Appearance, result)
-      return unless id = @appearance_rdict[appearance]?
-
-      parcel.reply(Message[Opcode::SetAppearance, appearance.mapper.call(result), Str[id]])
+    private def activate(parcel, appearance : Appearance, result)
+      mapped = appearance.mapper.call(result)
+      appearance.set(mapped)
+      @appearances_r.each do |host, rmap|
+        # Update appearance in all hosts
+        id = rmap[appearance]
+        parcel.reply(host, Message[Opcode::SetAppearance, mapped, Str[id]])
+      end
     end
 
     private def sense(parcel, sensor, term)
@@ -314,7 +326,7 @@ module Raktor
         return
       end
 
-      appearances = @appearance_map[result, report: Set(Recipe::Appearance).new]
+      appearances = @appearance_map[result, report: Set(Appearance).new]
       appearances.group_by(&.group_id?).each do |group_id, members|
         # If there is no group id specified, activate all appearances.
         if group_id.nil?
@@ -346,7 +358,7 @@ module Raktor
           parcel.reply(Message[Opcode::RegisterSensor, slot.to_u64, Str[sensor.filter]])
         end
         @appearance_slots.each do |slot, appearance|
-          remnant = appearance.remnant
+          remnant = appearance.recipe.remnant
           terms = remnant ? [remnant] : [] of Term
           parcel.reply(Message.new(Opcode::RegisterAppearance, args: [slot.to_u64], terms: terms))
         end
@@ -363,18 +375,20 @@ module Raktor
         end
       when .init_appearance?
         return unless id = message.terms[0]?.as?(Str)
-        return if @appearance_dict.has_key?(id.value)
+        return if @appearances[parcel.sender]?.try &.has_key?(id.value)
         return unless slot = message.args[0]?
         return unless appearance = @appearance_slots[slot]?
 
-        @appearance_dict[id.value] = appearance
-        @appearance_rdict[appearance] = id.value
+        dict = @appearances[parcel.sender] ||= {} of String => Appearance
+        rdict = @appearances_r[parcel.sender] ||= {} of Appearance => String
 
-        # If fully initialized send out defaults.
-        if @appearance_dict.size == @appearance_slots.size
-          @appearance_dict.each do |id, other|
-            next unless default = other.default
-            parcel.reply(Message[Opcode::SetAppearance, default, Str[id]])
+        dict[id.value] = appearance
+        rdict[appearance] = id.value
+
+        if dict.size == @appearance_slots.size
+          dict.each do |id, other|
+            next unless value = other.value
+            parcel.reply(Message[Opcode::SetAppearance, value, Str[id]])
           end
         end
       when .sense?
@@ -390,6 +404,8 @@ module Raktor
   class Node::Role::Host
     include Role
     include Terms
+
+    Log = ::Log.for("host")
 
     record Sensor, owner : IParcelEndpoint, id = UUID.random.to_s
     record Appearance, owner : IParcelEndpoint, remnant : Term? = nil, id = UUID.random.to_s do
@@ -432,7 +448,8 @@ module Raktor
       when .connect?
         parcel.reply(Message[Opcode::InitSelf])
       when .disconnect?
-        # puts "[DISCONNECT] Disconnect #{parcel}"
+        Log.info { "Disconnect #{parcel}" }
+
         if appearances = @owned_appearances.delete(parcel.sender)
           appearances.each do |appearance|
             @appearances.delete(appearance)
@@ -440,6 +457,7 @@ module Raktor
             notify(parcel, remnant)
           end
         end
+
         if sensors = @owned_sensors.delete(parcel.sender)
           @map.batch do
             sensors.each { |sensor| @map.delete(sensor) }
@@ -477,7 +495,9 @@ module Raktor
           )
         )
       when .unregister_appearance?
+        # TODO
       when .unregister_sensor?
+        # TODO
       when .set_appearance?
         return unless term = message.terms[0]?
         return unless id = message.terms[1]?.as?(Str)
@@ -506,7 +526,7 @@ module Raktor
 
   # Represents a node's inbox.
   struct Node::Inbox(T)
-    def initialize(@capacity : Int32 = 2**16)
+    def initialize(@capacity : Int32 = 2**14)
       @queue = Channel(T).new(@capacity)
     end
 

@@ -16,11 +16,7 @@ include Terms
 include Protocol
 
 describe Raktor::Protocol do
-  describe "serialization/deserialization of world" do
-    it "should serialize RequestUniqueIdRange" do
-      check(Message[Opcode::RequestUniqueIdRange])
-    end
-
+  describe "serialization/deserialization of server" do
     it "should serialize register sensor" do
       check(Message[Opcode::RegisterSensor, 123u64, Str["hello world"]])
     end
@@ -37,11 +33,7 @@ describe Raktor::Protocol do
     end
   end
 
-  describe "serialization/deserialization of node" do
-    it "should serialize AcceptUniqueIdRange" do
-      check(Message[Opcode::AcceptUniqueIdRange, 0, 1024])
-    end
-
+  describe "serialization/deserialization of client" do
     it "should serialize initsensor" do
       check(Message[Opcode::InitSensor, 123u64])
     end

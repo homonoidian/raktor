@@ -1,3 +1,5 @@
+require "log"
+require "json"
 require "uuid"
 require "http"
 require "cannon"
@@ -7,6 +9,7 @@ require "./ext/*"
 require "./raktor/term"
 require "./raktor/protocol"
 require "./raktor/sparse"
+require "./raktor/format"
 require "./raktor/node"
 require "./raktor/recipe"
 
@@ -14,3 +17,5 @@ require "./raktor/recipe"
 module Raktor
   VERSION = "0.1.0"
 end
+
+Log.setup(:trace)
