@@ -23,10 +23,6 @@ module Raktor::Sparse
     def initialize(@value : Float64)
     end
 
-    def initialize(value : String)
-      initialize(value.delete('_').to_f64)
-    end
-
     def to_f64s
       [@value]
     end
@@ -47,6 +43,44 @@ module Raktor::Sparse
     include Node
 
     def initialize(@value : String)
+    end
+
+    # Builds a string literal node from *token* and returns it. Interprets
+    # escape sequences in *token*.
+    def self.from_token(token : Token)
+      state = :start
+
+      value = String.build do |io|
+        token.byte_range.each do |byte_index|
+          byte = token.source.byte_at(byte_index)
+
+          case state
+          when :start
+            case byte
+            when '\\'
+              state = :escape
+            else
+              io.write_byte(byte)
+            end
+          when :escape
+            state = :start
+            case byte
+            when 'n' then io << '\n'
+            when 'r' then io << '\r'
+            when 't' then io << '\t'
+            when 'v' then io << '\v'
+            when 'e' then io << '\e'
+            when '0' then io << '\0'
+            when '"' then io << '"'
+            else
+              io << '\\'
+              io.write_byte(byte)
+            end
+          end
+        end
+      end
+
+      new(value)
     end
 
     def compile(chain : Chain, book : RuleBook) : Label

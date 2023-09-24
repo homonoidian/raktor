@@ -21,6 +21,122 @@ private class Counter(T)
 end
 
 describe Raktor::Sparse do
+  describe "parse errors" do
+    it "should accept empty input" do
+      Sparse::Parser.ast("").should eq(Sparse::AST::Constraint::AllPass.new)
+      Sparse::Parser.ast(" ").should eq(Sparse::AST::Constraint::AllPass.new)
+      Sparse::Parser.ast("\n").should eq(Sparse::AST::Constraint::AllPass.new)
+      Sparse::Parser.ast("\n\n").should eq(Sparse::AST::Constraint::AllPass.new)
+      Sparse::Parser.ast("\n\n  ").should eq(Sparse::AST::Constraint::AllPass.new)
+      Sparse::Parser.ast("\n\n  \t").should eq(Sparse::AST::Constraint::AllPass.new)
+      # ...
+    end
+
+    it "should lex+parse _+ as id" do
+      Sparse::Parser.ast("_").should eq(Sparse::AST::Id.new("_"))
+      Sparse::Parser.ast("__").should eq(Sparse::AST::Id.new("__"))
+      Sparse::Parser.ast("___").should eq(Sparse::AST::Id.new("___"))
+    end
+
+    it "should discard slash alone" do
+      expect_raises Sparse::Error, "did you mean '/?'?" do
+        Sparse::Parser.ast("/")
+      end
+    end
+
+    it "should raise on string literals appropriately, handle escape sequences" do
+      expect_raises Sparse::Error, "unterminated string literal" do
+        Sparse::Parser.ast(%Q("))
+      end
+
+      expect_raises Sparse::Error, "unterminated escape sequence" do
+        Sparse::Parser.ast(%Q("\\))
+      end
+
+      expect_raises Sparse::Error, "unterminated string literal" do
+        Sparse::Parser.ast(%Q("\\"))
+      end
+
+      Sparse::Parser.ast(%Q("\\"")).should eq(Sparse::AST::Str.new("\""))
+      Sparse::Parser.ast(%Q("\\n")).should eq(Sparse::AST::Str.new("\n"))
+      Sparse::Parser.ast(%Q("\\t")).should eq(Sparse::AST::Str.new("\t"))
+      Sparse::Parser.ast(%Q("\\r")).should eq(Sparse::AST::Str.new("\r"))
+      Sparse::Parser.ast(%Q("\\v")).should eq(Sparse::AST::Str.new("\v"))
+      Sparse::Parser.ast(%Q("\\e")).should eq(Sparse::AST::Str.new("\e"))
+      Sparse::Parser.ast(%Q("\\0")).should eq(Sparse::AST::Str.new("\0"))
+      Sparse::Parser.ast(%Q("\\foo")).should eq(Sparse::AST::Str.new("\\foo"))
+      Sparse::Parser.ast(%Q("fo\\no")).should eq(Sparse::AST::Str.new("fo\no"))
+    end
+
+    it "should err with end-of-input" do
+      expect_raises Sparse::Error, "unexpected end-of-input" do
+        Sparse::Parser.ast(%Q([))
+      end
+
+      expect_raises Sparse::Error, "unexpected end-of-input" do
+        Sparse::Parser.ast(%Q({))
+      end
+    end
+
+    it "should err in malformed constraints" do
+      expect_raises Sparse::Error, "expected a constraint, found none" do
+        Sparse::Parser.ast(%Q({ x }))
+      end
+
+      expect_raises Sparse::Error, "expected a constraint, found none" do
+        Sparse::Parser.ast(%Q({ x }))
+      end
+    end
+
+    it "should err expected a number/argument to follow" do
+      expect_raises Sparse::Error, "expected a number to follow '/?', as in `/? 100`" do
+        Sparse::Parser.ast(%Q(/?))
+      end
+
+      expect_raises Sparse::Error, "expected a number to follow '<', as in `< 100`" do
+        Sparse::Parser.ast(%Q(<))
+      end
+
+      expect_raises Sparse::Error, "expected a number to follow '>', as in `> 100`" do
+        Sparse::Parser.ast(%Q(>))
+      end
+
+      expect_raises Sparse::Error, "expected a number to follow '<=', as in `<= 100`" do
+        Sparse::Parser.ast(%Q(<=))
+      end
+
+      expect_raises Sparse::Error, "expected a number to follow '>=', as in `>= 100`" do
+        Sparse::Parser.ast(%Q(>=))
+      end
+
+      expect_raises Sparse::Error, "expected an argument to follow '|', as in `1 | 2`" do
+        Sparse::Parser.ast(%Q(>= 1 |))
+      end
+
+      expect_raises Sparse::Error, "expected an expression, like so: `1 or 2`" do
+        Sparse::Parser.ast(%Q(1 or))
+      end
+    end
+
+    it "should err expected argument to not" do
+      expect_raises Sparse::Error, "expected an argument to not()" do
+        Sparse::Parser.ast(%Q(not()))
+      end
+
+      expect_raises Sparse::Error, "expected an argument to not()" do
+        Sparse::Parser.ast(%Q(not\())
+      end
+
+      expect_raises Sparse::Error, "expected an argument to not()" do
+        Sparse::Parser.ast(%Q(not))
+      end
+
+      Sparse::Parser.ast(%Q(10_000..=20_000)).should eq(Sparse::AST::Constraint::InRange.new(
+        10_000.0.as(Float64?)..20_000.0.as(Float64?)
+      ))
+    end
+  end
+
   describe "type" do
     it "should support type any" do
       q(%Q(any), Terms::Str.new("hello world"), 0)

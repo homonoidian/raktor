@@ -2,14 +2,14 @@ module Raktor::Sparse
   class Parser
     include AST
 
-    # Base class of exceptions raised by the sensor parser.
-    class Error < Exception
-    end
-
     @token : Token?
 
     def initialize(source : String)
       @lexer = Lexer.new(source)
+    end
+
+    private def parse_f64(token : Token) : Float64
+      token.content.delete('_').to_f64
     end
 
     # Raises an error with the given *message*.
@@ -136,12 +136,12 @@ module Raktor::Sparse
       b = thru?(&.number?)
       unless range && ((inclusive = thru?(&.dotdot_eq?)) || thru?(&.dotdot_lt?))
         return unless b
-        return Num.new(b.content)
+        return Num.new(parse_f64(b))
       end
       e = thru?(&.number?)
 
-      b_f64 = b.content.to_f64 if b
-      ef_64 = e.content.to_f64 if e
+      b_f64 = parse_f64(b) if b
+      ef_64 = parse_f64(e) if e
 
       Constraint::InRange.new(inclusive ? b_f64..ef_64 : b_f64...ef_64)
     end
@@ -156,7 +156,7 @@ module Raktor::Sparse
       return unless op = thru? { |tt| tt.div_by? || tt.lt? || tt.gt? || tt.lte? || tt.gte? }
 
       unless arg = choice? { number? }
-        die("expected a number to follow '#{op}', as in `#{op} 100`")
+        die("expected a number to follow '#{op.content}', as in `#{op.content} 100`")
       end
 
       case op.type
@@ -206,7 +206,7 @@ module Raktor::Sparse
       return unless token = peek?
 
       case token.type
-      when .string? then node = Str.new(token.content)
+      when .string? then node = Str.from_token(token)
       when .true?   then node = Boolean.new(true)
       when .false?  then node = Boolean.new(false)
       when .id?     then node = Id.new(token.content)
@@ -271,10 +271,15 @@ module Raktor::Sparse
     # ```text
     # key ::= id | string
     # ```
-    private def key?
-      return unless token = thru? { |type| type.id? || type.string? }
+    private def key? : Term?
+      return unless token = thru? { |type| type.id? || type.string? || type.number? }
 
-      token.content
+      case token.type
+      when .id?, .string?
+        Term::Str[token.content]
+      when .number?
+        Term::Num[parse_f64(token)]
+      end
     end
 
     # Parses a key-value pair. Returns nil if no key-value pair is
@@ -289,10 +294,10 @@ module Raktor::Sparse
       thru?(&.colon?)
 
       unless constraint = constraint?
-        die("expected an constraint, found none")
+        die("expected a constraint, found none")
       end
 
-      KV.new(Term::Str.new(key), constraint)
+      KV.new(key, constraint)
     end
 
     # Parses a dictionary. Returns nil if no dictionary is found at

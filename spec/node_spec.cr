@@ -4,6 +4,27 @@ include Raktor
 include Terms
 
 describe Raktor::Node do
+  describe "errors" do
+    it "should raise at client-side if filter is malformed" do
+      host = Node.should { }
+
+      errors = Channel(Exception).new
+      c1 = Node.should(errors) do
+        sense %Q(")
+        sense %Q("foo") { Str["bar"] }
+        show
+      end
+
+      c1.join(host)
+
+      expect_raises Error, "filter refused: `\"`@0: unterminated string literal" do
+        raise errors.receive
+      end
+
+      probe(host, 10.milliseconds, "any", Str["foo"]).should eq(Set{Str["foo"], Str["bar"]})
+    end
+  end
+
   describe "misc" do
     it "should run addo/subo/divo/mulo" do
       addo = Node.should do

@@ -47,6 +47,17 @@ module Raktor::Protocol
     # with `RefuseFilter`.
     RegisterFilter
 
+    # *Sent by a host node to a client node* in response to a malformed
+    # `RegisterFilter`.
+    #
+    # ```text
+    # RefuseFilter(args: [u64 slot], terms: [])
+    # ```
+    #
+    # *slot* is the client-side reference to the filter that was
+    # provided in `RegisterFilter`.
+    RefuseFilter
+
     # *Sent by a client node to a host node*, usually in response to `InitSelf`.
     # Registers an appearance.
     #
@@ -64,6 +75,17 @@ module Raktor::Protocol
     # with `InitAppearance`. If there was an error, the host node responds
     # with `RefuseAppearance`.
     RegisterAppearance
+
+    # *Sent by a host node to a client node* in response to a malformed
+    # `RegisterAppearance`.
+    #
+    # ```text
+    # RefuseAppearance(args: [u64 slot], terms: [])
+    # ```
+    #
+    # *slot* is the client-side reference to the appearance that was
+    # provided in `RegisterAppearance`.
+    RefuseAppearance
 
     # *Sent by a host node to a client node* in response to `RegisterFilter`.
     # If received, it indicates a successful registration of the filter.

@@ -6,6 +6,7 @@ require "cannon"
 require "immutable"
 
 require "./ext/*"
+require "./raktor/error"
 require "./raktor/term"
 require "./raktor/protocol"
 require "./raktor/sparse"

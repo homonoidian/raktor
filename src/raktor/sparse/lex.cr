@@ -1,6 +1,6 @@
 module Raktor::Sparse
   # Represents a token of the input stream.
-  record Token, type : Type, source : String, range : Range(Int32, Int32) do
+  record Token, type : Type, source : String, byte_range : Range(Int32, Int32) do
     # Lists the available types of tokens.
     enum Type
       LT
@@ -30,11 +30,11 @@ module Raktor::Sparse
 
     # Returns the string content corresponding to this token.
     def content
-      source[range]
+      source.byte_slice(byte_range)
     end
 
     def to_s(io)
-      io << "<Token type=" << @type << " raw='" << source[range] << "'>"
+      io << "<Token type=" << @type << " content='" << content << "'>"
     end
   end
 
@@ -227,16 +227,22 @@ module Raktor::Sparse
             state = State::ESCAPE
             @reader.next_char
           else
+            unless @reader.has_next?
+              raise Error.new("unterminated string literal")
+            end
             @reader.next_char
           end
         in .escape?
           state = State::STRING
+          unless @reader.has_next?
+            raise Error.new("unterminated escape sequence")
+          end
           @reader.next_char
         in .slash?
           case chr
           when '?' then type, state = Token::Type::DIV_BY, State::END
           else
-            break
+            raise Error.new("did you mean '/?'?")
           end
         end
       end

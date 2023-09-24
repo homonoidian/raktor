@@ -48,6 +48,8 @@ module Raktor
     # A crude DSL for describing nodes in Crystal. For the available
     # methods see `Recipe`.
     #
+    # *args* and *kwargs* are passed to `Node#spawn`.
+    #
     # ```
     # Node.should do
     #   sense "number"
@@ -55,7 +57,7 @@ module Raktor
     #   show "> 100"
     # end
     # ```
-    def self.should(&)
+    def self.should(*args, **kwargs, &)
       recipe = Recipe.new
       with recipe yield
       node = Node.new([
@@ -64,7 +66,7 @@ module Raktor
         Role::PingSender.new,
         Role::PingReceiver.new,
       ] of Role)
-      node.spawn
+      node.spawn(*args, **kwargs)
       node
     end
 
@@ -100,16 +102,17 @@ module Raktor
 
     # Todo: give control of the server to the outside world
     # Todo: how to bridge between worlds securely?
-    # Todo: reuse one server for many worlds?
+    # Todo: reuse one server for many worlds (defsocket lang-wise? e.g. `(defsocket foo 'tcp://0.0.0.0:5000')`)?
 
     # Spawns
-    def spawn
+    def spawn(errchan = nil)
       spawn do
         while parcel = @inbox.receive
           begin
             @roles.each &.handle(parcel)
-          rescue e : Exception
+          rescue e : Error
             Log.error(exception: e) { "Error while handling parcel" }
+            errchan.try &.send(e)
           end
         end
       end
@@ -375,6 +378,10 @@ module Raktor
         message.terms.each(within: 1..) do |term|
           sense(parcel, sensor, term)
         end
+      when .refuse_filter?
+        return unless slot = message.args[0]?
+        return unless reason = message.terms[0]?
+        raise Error.new("filter refused: #{@sensor_slots[slot]}: #{reason.value}")
       when .init_appearance?
         return unless id = message.terms[0]?.as?(Str)
         return if @appearances[parcel.sender]?.try &.has_key?(id.value)
@@ -481,12 +488,18 @@ module Raktor
         return unless slot = message.args[0]?
         return unless filter = message.terms[0]?.as?(Str)
         terms = [] of Term
-        @map.upsert(sensor = Sensor.new(parcel.sender), filter.value) do |query|
-          @appearances.each_value do |term|
-            next unless term
-            next unless query[term, report: BoolReport(Sensor).new].true?
-            terms << term
+        sensor = Sensor.new(parcel.sender)
+        begin
+          @map.upsert(sensor, filter.value) do |query|
+            @appearances.each_value do |term|
+              next unless term
+              next unless query[term, report: BoolReport(Sensor).new].true?
+              terms << term
+            end
           end
+        rescue e : Error
+          parcel.reply(Message[Opcode::RefuseFilter, slot, Str[e.message || "error"]])
+          return
         end
         ownerof = @owned_sensors[parcel.sender] ||= Set(Sensor).new
         ownerof << sensor
@@ -504,6 +517,7 @@ module Raktor
         return unless term = message.terms[0]?
         return unless id = message.terms[1]?.as?(Str)
         return unless @appearances.has_key?(key = Appearance.new(parcel.sender, id: id.value))
+
         @appearances[key] = term
 
         notify(parcel, term)

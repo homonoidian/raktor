@@ -13,6 +13,10 @@ module Raktor
       def initialize(@filter : String, @mapper : Term -> Term, @slot : Int32)
       end
 
+      def to_s(io)
+        io << "`" << @filter << "`@" << @slot
+      end
+
       def_equals_and_hash slot
     end
 

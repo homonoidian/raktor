@@ -185,7 +185,12 @@ module Raktor::Sparse
     # ```
     def batch(&)
       @batch += 1
-      yield
+      begin
+        yield
+      rescue e
+        @batch -= 1
+        raise e
+      end
       @batch -= 1
       if @batch.zero?
         invalidate
@@ -275,6 +280,7 @@ module Raktor::Sparse
     def upsert(key : Key, program : String, & : UpsertQuery(Key) ->)
       batch do
         delete(key) unless @keys.add?(key)
+
         collate(key, program) do |filter, book|
           compiled = compile(@vm, filter, book, ConjTree.new)
           yield UpsertQuery.new(compiled)
@@ -282,6 +288,9 @@ module Raktor::Sparse
 
         @book.swap_equations(@filter)
         @book.rewrite
+      rescue e : Error
+        @keys.delete(key) # hack
+        raise e
       end
     end
 
@@ -302,9 +311,8 @@ module Raktor::Sparse
     # map[Term::Num.new(123), report: Set(T).new]   # => Set{...} (same as report)
     # ```
     def [](term : Term | Enumerable(Term), report : IReport(Key) = [] of Key) : IReport(Key)
-      if compiled = @compiled
-        compiled.query(term, report)
-      end
+      compiled = (@compiled || invalidate).not_nil! # hack
+      compiled.query(term, report)
 
       report
     end
